@@ -8,9 +8,9 @@ interface BalanceOverviewProps {
 }
 
 export const BalanceOverview: React.FC<BalanceOverviewProps> = ({
-  balance,
-  change,
-  profit,
+  balance = 0,
+  change = 0,
+  profit = 0,
 }) => {
   return (
     <div className="bg-[#121214] border border-[#242429] rounded-xl p-6">
@@ -18,8 +18,8 @@ export const BalanceOverview: React.FC<BalanceOverviewProps> = ({
         <h2 className="text-lg font-medium mb-2">Total Staked</h2>
         <div className="flex items-baseline gap-4">
           <p className="text-3xl font-bold">{balance.toLocaleString()} HMMM</p>
-          <p className="text-green-500">
-            +{change}% ({profit.toLocaleString()} HMMM)
+          <p className={`${change >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+            {change >= 0 ? '+' : ''}{change.toFixed(2)}% ({profit.toLocaleString()} HMMM)
           </p>
         </div>
       </div>

@@ -9,6 +9,7 @@ import {
 } from '../config/contracts';
 
 const HMMM_DECIMALS = 9;
+const POLLING_INTERVAL = 1000; // Poll every second for real-time updates
 
 interface StakingData {
   stakedBalance: string;
@@ -17,6 +18,8 @@ interface StakingData {
   apr: number;
   lockPeriod: number;
   cooldownPeriod: number;
+  rewardsValue: number;
+  profitPercentage: number;
 }
 
 interface StakingEvent {
@@ -32,7 +35,9 @@ const initialData: StakingData = {
   tokenBalance: '0',
   apr: 0,
   lockPeriod: 0,
-  cooldownPeriod: 0
+  cooldownPeriod: 0,
+  rewardsValue: 0,
+  profitPercentage: 0
 };
 
 export const useStakingData = () => {
@@ -51,9 +56,13 @@ export const useStakingData = () => {
   const { data: stakedBalance, refetch: refetchStakedBalance } = useReadContract({
     address: STAKING_CONTRACT_ADDRESS,
     abi: STAKING_CONTRACT_ABI,
-    functionName: 'stakedBalance',
+    functionName: 'TokensStaked',
     args: address ? [address] : undefined,
   });
+
+  console.log('Raw staked balance from contract:', stakedBalance);
+  console.log('Address being used:', address);
+  console.log('Contract address:', STAKING_CONTRACT_ADDRESS);
 
   // Pending rewards
   const { data: pendingRewards, refetch: refetchRewards } = useReadContract({
@@ -62,6 +71,9 @@ export const useStakingData = () => {
     functionName: 'pendingRewards',
     args: address ? [address] : undefined,
   });
+
+  console.log('Raw pending rewards from contract:', pendingRewards);
+  console.log('User address for rewards:', address);
 
   // APR
   const { data: apr } = useReadContract({
@@ -92,7 +104,7 @@ export const useStakingData = () => {
       refetchTokenBalance();
       refetchStakedBalance();
       refetchRewards();
-    }, 15000); // Refresh every 15 seconds
+    }, POLLING_INTERVAL);
 
     return () => clearInterval(interval);
   }, [isConnected, address, refetchTokenBalance, refetchStakedBalance, refetchRewards]);
@@ -183,11 +195,36 @@ export const useStakingData = () => {
     tokenBalance: typeof tokenBalance === 'bigint' ? formatUnits(tokenBalance, HMMM_DECIMALS) : '0',
     apr: typeof apr === 'bigint' ? Number(apr) / 100 : 0,
     lockPeriod: typeof lockPeriod === 'bigint' ? Number(lockPeriod) : 0,
-    cooldownPeriod: typeof cooldownPeriod === 'bigint' ? Number(cooldownPeriod) : 0
+    cooldownPeriod: typeof cooldownPeriod === 'bigint' ? Number(cooldownPeriod) : 0,
+    rewardsValue: 0,
+    profitPercentage: 0
   };
 
-  console.log('Raw token balance:', tokenBalance?.toString());
-  console.log('Formatted token balance:', formattedData.tokenBalance);
+  console.log('Formatted pending rewards:', formattedData.pendingRewards);
+
+  // Calculate profit percentage and rewards value with proper decimal handling
+  const stakedBalanceNum = parseFloat(formattedData.stakedBalance);
+  const pendingRewardsNum = parseFloat(formattedData.pendingRewards);
+  
+  // Format small numbers to show more decimal places for better precision
+  const formatSmallNumber = (num: number): string => {
+    if (num === 0) return '0';
+    if (num < 0.000001) return num.toExponential(4);
+    if (num < 0.01) return num.toFixed(6);
+    return num.toFixed(4);
+  };
+
+  const profitPercentage = stakedBalanceNum > 0 ? (pendingRewardsNum / stakedBalanceNum) * 100 : 0;
+
+  // Debug the values with better formatting
+  console.log('Staked balance raw:', stakedBalance);
+  console.log('Staked balance formatted:', formatSmallNumber(stakedBalanceNum));
+  console.log('Pending rewards:', formatSmallNumber(pendingRewardsNum));
+  console.log('Profit percentage:', formatSmallNumber(profitPercentage));
+
+  // Log the raw and formatted values for debugging
+  console.log('Raw staked balance:', stakedBalance?.toString());
+  console.log('Formatted staked balance:', formatSmallNumber(stakedBalanceNum));
   console.log('Staking data:', formattedData);
   console.log('History:', history);
 
@@ -196,6 +233,8 @@ export const useStakingData = () => {
     isLoading: false,
     error: null,
     history,
+    rewardsValue: pendingRewardsNum,
+    profitPercentage,
     refetch: () => {
       refetchTokenBalance();
       refetchStakedBalance();

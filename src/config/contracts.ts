@@ -7,8 +7,8 @@ export const HMMM_TOKEN_ADDRESS = '0x88Cf50037f8069071Cd56f641a81b369a5Fd3a42';
 export const STAKING_CONTRACT_ABI = [
   // View functions
   {
-    inputs: [{ name: "user", type: "address" }],
-    name: "stakedBalance",
+    inputs: [{ name: "account", type: "address" }],
+    name: "TokensStaked",
     outputs: [{ name: "", type: "uint256" }],
     stateMutability: "view",
     type: "function"

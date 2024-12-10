@@ -1,6 +1,6 @@
 import { useAccount, useReadContract, useWriteContract, usePublicClient } from 'wagmi';
 import { parseUnits } from 'viem';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   STAKING_CONTRACT_ADDRESS,
   HMMM_TOKEN_ADDRESS,
@@ -24,12 +24,22 @@ export const useContracts = () => {
   });
 
   // Read allowance
-  const { data: allowance } = useReadContract({
+  const { data: allowance, refetch: refetchAllowance } = useReadContract({
     address: HMMM_TOKEN_ADDRESS,
     abi: HMMM_TOKEN_ABI,
     functionName: 'allowance',
     args: address ? [address, STAKING_CONTRACT_ADDRESS] : undefined,
   });
+
+  // Listen for allowance updates
+  useEffect(() => {
+    const handleAllowanceUpdate = () => {
+      refetchAllowance();
+    };
+
+    window.addEventListener('allowanceUpdated', handleAllowanceUpdate);
+    return () => window.removeEventListener('allowanceUpdated', handleAllowanceUpdate);
+  }, [refetchAllowance]);
 
   // Contract writes
   const { writeContractAsync: writeToken } = useWriteContract();

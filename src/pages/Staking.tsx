@@ -16,7 +16,7 @@ type TabType = 'overview' | 'history' | 'invest' | 'send';
 const Staking: React.FC = () => {
   const [activeTab, setActiveTab] = useState<TabType>('overview');
   const { address, formatAddress } = useWallet();
-  const { tokenBalance, stakedBalance } = useStakingData();
+  const { tokenBalance, stakedBalance, rewardsValue, profitPercentage } = useStakingData();
 
   const navItems = [
     { icon: Eye, label: 'Overview', id: 'overview' as TabType, isActive: activeTab === 'overview' },
@@ -41,9 +41,9 @@ const Staking: React.FC = () => {
           <div className="flex gap-8">
             <div className="flex-1">
               <BalanceOverview 
-                balance={parseFloat(stakedBalance)}
-                change={13.7}
-                profit={313.65}
+                balance={parseFloat(stakedBalance || '0')}
+                change={profitPercentage}
+                profit={rewardsValue}
               />
             </div>
             <div className="w-80">
