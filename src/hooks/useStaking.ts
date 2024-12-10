@@ -1,9 +1,9 @@
 import { useState, useCallback } from 'react';
 import { ethers } from 'ethers';
-import { useWeb3 } from './useWeb3';
+import { useContracts } from './useContracts';
 
 export const useStaking = () => {
-  const { address, stakingContract, tokenContract } = useWeb3();
+  const { address, stakingContract, tokenContract } = useContracts();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 

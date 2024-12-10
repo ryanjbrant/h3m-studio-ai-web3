@@ -1,5 +1,5 @@
 import React, { Suspense, useEffect } from 'react';
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AnimatePresence } from 'framer-motion';
 import { Header } from './components/navigation/Header';
 import { PageTransition } from './components/PageTransition';
@@ -22,10 +22,11 @@ const Mission = React.lazy(() => import('./pages/Mission'));
 const Vision = React.lazy(() => import('./pages/Vision'));
 const Team = React.lazy(() => import('./pages/Team'));
 const Login = React.lazy(() => import('./pages/Login'));
+const Profile = React.lazy(() => import('./pages/Profile'));
 const Dashboard = React.lazy(() => import('./pages/admin/Dashboard'));
 
 function App() {
-  const { setUser, setLoading } = useAuthStore();
+  const { setUser, setLoading, user } = useAuthStore();
 
   useEffect(() => {
     const unsubscribe = onAuthChange((user) => {
@@ -108,10 +109,19 @@ function App() {
                   <Login />
                 </PageTransition>
               } />
-              <Route path="/admin/*" element={
+              <Route path="/profile" element={
                 <PageTransition>
-                  <Dashboard />
+                  <Profile />
                 </PageTransition>
+              } />
+              <Route path="/admin/*" element={
+                user?.isAdmin ? (
+                  <PageTransition>
+                    <Dashboard />
+                  </PageTransition>
+                ) : (
+                  <Navigate to="/login" replace />
+                )
               } />
             </Routes>
           </AnimatePresence>

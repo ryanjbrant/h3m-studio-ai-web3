@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
-import { Menu, X, User } from 'lucide-react';
+import { Menu, X, User, MoreVertical } from 'lucide-react';
 import { DropdownMenu } from './DropdownMenu';
-import { NavLink } from './NavLink';
 import { Logo } from './Logo';
 import { Link } from 'react-router-dom';
 import { useAuthStore } from '../../store/authStore';
@@ -55,13 +54,27 @@ export const Header: React.FC = () => {
             {user ? (
               <UserMenu />
             ) : (
-              <button
-                onClick={() => setShowAuth(true)}
-                className="flex items-center gap-2 px-3 py-1.5 rounded-md hover:bg-[#242429] transition-colors text-sm"
-              >
-                <User className="w-4 h-4" />
-                Sign In
-              </button>
+              <div className="flex items-center space-x-2">
+                <button
+                  onClick={() => {
+                    setAuthMode('signup');
+                    setShowAuth(true);
+                  }}
+                  className="flex items-center gap-2 px-3 py-1.5 bg-[#0a0a0b] border border-[#242429] text-white rounded-md hover:bg-[#242429] transition-colors text-sm"
+                >
+                  <User className="w-4 h-4" />
+                  Sign Up
+                </button>
+                <button
+                  onClick={() => {
+                    setAuthMode('signin');
+                    setShowAuth(true);
+                  }}
+                  className="p-1.5 hover:bg-[#242429] rounded-md transition-colors"
+                >
+                  <MoreVertical className="w-4 h-4" />
+                </button>
+              </div>
             )}
           </div>
 
@@ -121,16 +134,29 @@ export const Header: React.FC = () => {
             <div className="px-3 py-2 space-y-2">
               <WalletButton />
               {!user && (
-                <button
-                  onClick={() => {
-                    setShowAuth(true);
-                    setIsMobileMenuOpen(false);
-                  }}
-                  className="w-full flex items-center gap-2 px-3 py-1.5 rounded-md hover:bg-[#242429] transition-colors text-sm"
-                >
-                  <User className="w-4 h-4" />
-                  Sign In
-                </button>
+                <div className="flex flex-col space-y-2">
+                  <button
+                    onClick={() => {
+                      setAuthMode('signup');
+                      setShowAuth(true);
+                      setIsMobileMenuOpen(false);
+                    }}
+                    className="w-full flex items-center gap-2 px-3 py-1.5 bg-[#0a0a0b] border border-[#242429] text-white rounded-md hover:bg-[#242429] transition-colors text-sm"
+                  >
+                    <User className="w-4 h-4" />
+                    Sign Up
+                  </button>
+                  <button
+                    onClick={() => {
+                      setAuthMode('signin');
+                      setShowAuth(true);
+                      setIsMobileMenuOpen(false);
+                    }}
+                    className="w-full flex items-center justify-center p-1.5 hover:bg-[#242429] rounded-md transition-colors"
+                  >
+                    <MoreVertical className="w-4 h-4" />
+                  </button>
+                </div>
               )}
             </div>
           </div>

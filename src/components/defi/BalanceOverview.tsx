@@ -15,11 +15,11 @@ export const BalanceOverview: React.FC<BalanceOverviewProps> = ({
   return (
     <div className="bg-[#121214] border border-[#242429] rounded-xl p-6">
       <div className="mb-6">
-        <h2 className="text-lg font-medium mb-2">Total Balance</h2>
+        <h2 className="text-lg font-medium mb-2">Total Staked</h2>
         <div className="flex items-baseline gap-4">
-          <p className="text-3xl font-bold">${balance.toLocaleString()}</p>
+          <p className="text-3xl font-bold">{balance.toLocaleString()} HMMM</p>
           <p className="text-green-500">
-            +{change}% (${profit.toLocaleString()})
+            +{change}% ({profit.toLocaleString()} HMMM)
           </p>
         </div>
       </div>

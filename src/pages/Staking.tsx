@@ -8,11 +8,15 @@ import { ActionButtons } from '../components/defi/ActionButtons';
 import { HistoryTab } from '../components/defi/tabs/HistoryTab';
 import { InvestTab } from '../components/defi/tabs/InvestTab';
 import { SendTab } from '../components/defi/tabs/SendTab';
+import { useWallet } from '../hooks/useWallet';
+import { useStakingData } from '../hooks/useStakingData';
 
 type TabType = 'overview' | 'history' | 'invest' | 'send';
 
 const Staking: React.FC = () => {
   const [activeTab, setActiveTab] = useState<TabType>('overview');
+  const { address, formatAddress } = useWallet();
+  const { tokenBalance, stakedBalance } = useStakingData();
 
   const navItems = [
     { icon: Eye, label: 'Overview', id: 'overview' as TabType, isActive: activeTab === 'overview' },
@@ -37,7 +41,7 @@ const Staking: React.FC = () => {
           <div className="flex gap-8">
             <div className="flex-1">
               <BalanceOverview 
-                balance={2619.10}
+                balance={parseFloat(stakedBalance)}
                 change={13.7}
                 profit={313.65}
               />
@@ -64,8 +68,8 @@ const Staking: React.FC = () => {
       <div className="flex">
         <div className="w-64 min-h-[calc(100vh-44px)] border-r border-[#242429] p-6">
           <WalletProfile 
-            address="0xc547...f187"
-            balance={2619.10}
+            address={address ? formatAddress(address) : ''}
+            balance={parseFloat(tokenBalance || '0')}
           />
           <SidebarNav items={navItems} />
         </div>

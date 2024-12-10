@@ -1,14 +1,15 @@
 import React from 'react';
 import { Clock, Gift, Loader2 } from 'lucide-react';
+import { formatEther } from 'ethers';
 import { useStaking } from '../../../hooks/useStaking';
 import { useStakingData } from '../../../hooks/useStakingData';
-import { ethers } from 'ethers';
 
 export const StakingRewards: React.FC = () => {
   const { claimRewards, isLoading } = useStaking();
   const { pendingRewards, cooldownPeriod } = useStakingData();
 
-  const formattedRewards = parseFloat(ethers.utils.formatEther(pendingRewards || '0')).toFixed(2);
+  const formattedRewards = parseFloat(formatEther(pendingRewards || '0')).toFixed(2);
+  // ... rest of the component
   const nextClaimDate = new Date(Date.now() + (cooldownPeriod * 1000));
 
   return (

@@ -1,7 +1,5 @@
 import { 
   collection,
-  query,
-  where,
   getDocs,
   updateDoc,
   doc,
@@ -9,8 +7,16 @@ import {
   Timestamp
 } from 'firebase/firestore';
 import { db } from '../config/firebase';
+import { AdminUser } from '../types/admin'; // Import AdminUser type
 
-export const getAdminStats = async () => {
+export interface AdminStats {
+  activeUsers: number;
+  modelsGenerated: number;
+  monthlyRevenue: number;
+  storageUsed: number;
+}
+
+export const getAdminStats = async (): Promise<AdminStats> => {
   try {
     const statsRef = doc(db, 'admin', 'stats');
     const statsDoc = await getDoc(statsRef);
@@ -19,22 +25,25 @@ export const getAdminStats = async () => {
       throw new Error('Stats not found');
     }
 
-    return statsDoc.data();
+    return statsDoc.data() as AdminStats;
   } catch (error) {
     console.error('Error fetching admin stats:', error);
     throw error;
   }
 };
 
-export const getUsersList = async () => {
+export const getUsersList = async (): Promise<AdminUser[]> => {
   try {
     const usersRef = collection(db, 'users');
     const snapshot = await getDocs(usersRef);
     
     return snapshot.docs.map(doc => ({
       id: doc.id,
+      email: doc.data().email,
+      role: doc.data().role || 'user',
+      disabled: doc.data().disabled || false,
       ...doc.data()
-    }));
+    })) as AdminUser[];
   } catch (error) {
     console.error('Error fetching users list:', error);
     throw error;

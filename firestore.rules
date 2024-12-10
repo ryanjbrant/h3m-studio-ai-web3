@@ -6,22 +6,23 @@ service cloud.firestore {
       return request.auth != null;
     }
     
-    function isOwner(userId) {
-      return isAuthenticated() && request.auth.uid == userId;
-    }
-    
-    // Textures collection
-    match /textures/{textureId} {
-      allow read: if resource.data.isPublic || isOwner(resource.data.userId);
-      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
-      allow update, delete: if isOwner(resource.data.userId);
+    function isAdmin() {
+      return isAuthenticated() && 
+        (request.auth.token.email == 'ryanjbrant@gmail.com' || 
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin');
     }
     
     // Users collection
     match /users/{userId} {
-      allow read: if true;
+      allow read: if isAuthenticated() && (request.auth.uid == userId || isAdmin());
       allow create: if isAuthenticated() && request.auth.uid == userId;
-      allow update: if isOwner(userId);
+      allow update: if isAuthenticated() && (request.auth.uid == userId || isAdmin());
+      allow delete: if isAdmin();
+    }
+    
+    // Admin collection
+    match /admin/{document=**} {
+      allow read, write: if isAdmin();
     }
   }
 }

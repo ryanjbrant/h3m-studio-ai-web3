@@ -20,7 +20,7 @@ export const WalletProfile: React.FC<WalletProfileProps> = ({ address, balance }
       </div>
       <div>
         <p className="text-sm text-gray-400 mb-1">Balance</p>
-        <p className="text-2xl font-bold">${balance.toLocaleString()}</p>
+        <p className="text-2xl font-bold">{balance.toLocaleString()} HMMM</p>
       </div>
     </div>
   );

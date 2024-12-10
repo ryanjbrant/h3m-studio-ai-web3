@@ -1,11 +1,10 @@
 import { create } from 'zustand';
-import { User } from 'firebase/auth';
 import { 
   getAdminStats, 
   getUsersList,
-  updateUserRole,
-  getStorageStats
+  updateUserRole
 } from '../services/admin';
+import { AdminUser } from '../types/admin';
 
 interface AdminState {
   stats: {
@@ -14,7 +13,7 @@ interface AdminState {
     monthlyRevenue: number;
     storageUsed: number;
   };
-  users: User[];
+  users: AdminUser[];
   loading: boolean;
   error: string | null;
   fetchStats: () => Promise<void>;

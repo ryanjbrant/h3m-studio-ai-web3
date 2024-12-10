@@ -1,6 +1,14 @@
-import { useState, useEffect, useCallback } from 'react';
-import { ethers } from 'ethers';
-import { useWeb3 } from './useWeb3';
+import { useAccount, useReadContract, useWatchContractEvent } from 'wagmi';
+import { formatUnits } from 'viem';
+import { useEffect, useState } from 'react';
+import {
+  STAKING_CONTRACT_ADDRESS,
+  HMMM_TOKEN_ADDRESS,
+  STAKING_CONTRACT_ABI,
+  HMMM_TOKEN_ABI
+} from '../config/contracts';
+
+const HMMM_DECIMALS = 9;
 
 interface StakingData {
   stakedBalance: string;
@@ -11,88 +19,187 @@ interface StakingData {
   cooldownPeriod: number;
 }
 
+interface StakingEvent {
+  type: 'stake' | 'unstake' | 'claim';
+  amount: string;
+  timestamp: number;
+  transactionHash: `0x${string}`;
+}
+
+const initialData: StakingData = {
+  stakedBalance: '0',
+  pendingRewards: '0',
+  tokenBalance: '0',
+  apr: 0,
+  lockPeriod: 0,
+  cooldownPeriod: 0
+};
+
 export const useStakingData = () => {
-  const { address, stakingContract, tokenContract } = useWeb3();
-  const [data, setData] = useState<StakingData>({
-    stakedBalance: '0',
-    pendingRewards: '0',
-    tokenBalance: '0',
-    apr: 0,
-    lockPeriod: 0,
-    cooldownPeriod: 0
+  const { address, isConnected } = useAccount();
+  const [history, setHistory] = useState<StakingEvent[]>([]);
+
+  // Token balance
+  const { data: tokenBalance, refetch: refetchTokenBalance } = useReadContract({
+    address: HMMM_TOKEN_ADDRESS,
+    abi: HMMM_TOKEN_ABI,
+    functionName: 'balanceOf',
+    args: address ? [address] : undefined,
   });
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
 
-  const fetchData = useCallback(async () => {
-    if (!stakingContract || !tokenContract || !address) {
-      setIsLoading(false);
-      return;
-    }
+  // Staked balance
+  const { data: stakedBalance, refetch: refetchStakedBalance } = useReadContract({
+    address: STAKING_CONTRACT_ADDRESS,
+    abi: STAKING_CONTRACT_ABI,
+    functionName: 'stakedBalance',
+    args: address ? [address] : undefined,
+  });
 
-    try {
-      setIsLoading(true);
-      setError(null);
+  // Pending rewards
+  const { data: pendingRewards, refetch: refetchRewards } = useReadContract({
+    address: STAKING_CONTRACT_ADDRESS,
+    abi: STAKING_CONTRACT_ABI,
+    functionName: 'pendingRewards',
+    args: address ? [address] : undefined,
+  });
 
-      const [
-        stakedBalance,
-        pendingRewards,
-        tokenBalance,
-        apr,
-        lockPeriod,
-        cooldownPeriod
-      ] = await Promise.all([
-        stakingContract.stakedBalance(address),
-        stakingContract.pendingRewards(address),
-        tokenContract.balanceOf(address),
-        stakingContract.apr(),
-        stakingContract.lockPeriod(),
-        stakingContract.cooldownPeriod()
-      ]);
+  // APR
+  const { data: apr } = useReadContract({
+    address: STAKING_CONTRACT_ADDRESS,
+    abi: STAKING_CONTRACT_ABI,
+    functionName: 'apr',
+  });
 
-      setData({
-        stakedBalance: ethers.utils.formatEther(stakedBalance),
-        pendingRewards: ethers.utils.formatEther(pendingRewards),
-        tokenBalance: ethers.utils.formatEther(tokenBalance),
-        apr: apr.toNumber() / 100, // Convert from basis points
-        lockPeriod: lockPeriod.toNumber(),
-        cooldownPeriod: cooldownPeriod.toNumber()
-      });
-    } catch (err) {
-      console.error('Error fetching staking data:', err);
-      setError(err instanceof Error ? err.message : 'Failed to fetch staking data');
-    } finally {
-      setIsLoading(false);
-    }
-  }, [stakingContract, tokenContract, address]);
+  // Lock period
+  const { data: lockPeriod } = useReadContract({
+    address: STAKING_CONTRACT_ADDRESS,
+    abi: STAKING_CONTRACT_ABI,
+    functionName: 'lockPeriod',
+  });
 
+  // Cooldown period
+  const { data: cooldownPeriod } = useReadContract({
+    address: STAKING_CONTRACT_ADDRESS,
+    abi: STAKING_CONTRACT_ABI,
+    functionName: 'cooldownPeriod',
+  });
+
+  // Refresh data periodically
   useEffect(() => {
-    fetchData();
+    if (!isConnected || !address) return;
 
-    // Set up event listeners for updates
-    if (stakingContract && address) {
-      const filters = [
-        stakingContract.filters.Staked(address),
-        stakingContract.filters.Unstaked(address),
-        stakingContract.filters.RewardsClaimed(address)
-      ];
+    const interval = setInterval(() => {
+      refetchTokenBalance();
+      refetchStakedBalance();
+      refetchRewards();
+    }, 15000); // Refresh every 15 seconds
 
-      filters.forEach(filter => {
-        stakingContract.on(filter, fetchData);
+    return () => clearInterval(interval);
+  }, [isConnected, address, refetchTokenBalance, refetchStakedBalance, refetchRewards]);
+
+  // Watch for staking events
+  useWatchContractEvent({
+    address: STAKING_CONTRACT_ADDRESS,
+    abi: STAKING_CONTRACT_ABI,
+    eventName: 'Staked',
+    onLogs: (logs) => {
+      logs.forEach((log) => {
+        if (log.args.user === address && log.args.amount) {
+          const newEvent: StakingEvent = {
+            type: 'stake',
+            amount: formatUnits(log.args.amount, HMMM_DECIMALS),
+            timestamp: Date.now(),
+            transactionHash: log.transactionHash
+          };
+          setHistory(prev => [newEvent, ...prev]);
+          
+          // Refresh balances
+          refetchTokenBalance();
+          refetchStakedBalance();
+          refetchRewards();
+        }
       });
+    },
+  });
 
-      return () => {
-        filters.forEach(filter => {
-          stakingContract.off(filter, fetchData);
-        });
-      };
-    }
-  }, [stakingContract, address, fetchData]);
+  // Watch for unstaking events
+  useWatchContractEvent({
+    address: STAKING_CONTRACT_ADDRESS,
+    abi: STAKING_CONTRACT_ABI,
+    eventName: 'Unstaked',
+    onLogs: (logs) => {
+      logs.forEach((log) => {
+        if (log.args.user === address && log.args.amount) {
+          const newEvent: StakingEvent = {
+            type: 'unstake',
+            amount: formatUnits(log.args.amount, HMMM_DECIMALS),
+            timestamp: Date.now(),
+            transactionHash: log.transactionHash
+          };
+          setHistory(prev => [newEvent, ...prev]);
+          
+          // Refresh balances
+          refetchTokenBalance();
+          refetchStakedBalance();
+          refetchRewards();
+        }
+      });
+    },
+  });
+
+  // Watch for reward claims
+  useWatchContractEvent({
+    address: STAKING_CONTRACT_ADDRESS,
+    abi: STAKING_CONTRACT_ABI,
+    eventName: 'RewardsClaimed',
+    onLogs: (logs) => {
+      logs.forEach((log) => {
+        if (log.args.user === address && log.args.amount) {
+          const newEvent: StakingEvent = {
+            type: 'claim',
+            amount: formatUnits(log.args.amount, HMMM_DECIMALS),
+            timestamp: Date.now(),
+            transactionHash: log.transactionHash
+          };
+          setHistory(prev => [newEvent, ...prev]);
+          
+          // Refresh balances
+          refetchTokenBalance();
+          refetchStakedBalance();
+          refetchRewards();
+        }
+      });
+    },
+  });
+
+  if (!isConnected || !address) {
+    console.log('Not connected');
+    return { ...initialData, isLoading: false, error: null, history: [] };
+  }
+
+  const formattedData: StakingData = {
+    stakedBalance: typeof stakedBalance === 'bigint' ? formatUnits(stakedBalance, HMMM_DECIMALS) : '0',
+    pendingRewards: typeof pendingRewards === 'bigint' ? formatUnits(pendingRewards, HMMM_DECIMALS) : '0',
+    tokenBalance: typeof tokenBalance === 'bigint' ? formatUnits(tokenBalance, HMMM_DECIMALS) : '0',
+    apr: typeof apr === 'bigint' ? Number(apr) / 100 : 0,
+    lockPeriod: typeof lockPeriod === 'bigint' ? Number(lockPeriod) : 0,
+    cooldownPeriod: typeof cooldownPeriod === 'bigint' ? Number(cooldownPeriod) : 0
+  };
+
+  console.log('Raw token balance:', tokenBalance?.toString());
+  console.log('Formatted token balance:', formattedData.tokenBalance);
+  console.log('Staking data:', formattedData);
+  console.log('History:', history);
 
   return {
-    ...data,
-    isLoading,
-    error,
-    refresh: fetchData
+    ...formattedData,
+    isLoading: false,
+    error: null,
+    history,
+    refetch: () => {
+      refetchTokenBalance();
+      refetchStakedBalance();
+      refetchRewards();
+    }
   };
 };
