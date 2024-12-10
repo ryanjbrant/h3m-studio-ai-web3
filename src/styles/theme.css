@@ -1,0 +1,29 @@
+@tailwind base;
+
+:root {
+  --background: 0 0 0;
+  --foreground: 255 255 255;
+  --muted: 28 28 31;
+  --muted-foreground: 160 160 160;
+  --accent: 36 36 41;
+  --accent-foreground: 255 255 255;
+  --border: 36 36 41;
+  --hover: 45 45 50;
+}
+
+@layer base {
+  body {
+    @apply bg-[#000000] text-white overflow-x-hidden;
+  }
+
+  /* Hide scrollbar for Chrome, Safari and Opera */
+  ::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Hide scrollbar for IE, Edge and Firefox */
+  html {
+    -ms-overflow-style: none;  /* IE and Edge */
+    scrollbar-width: none;  /* Firefox */
+  }
+}

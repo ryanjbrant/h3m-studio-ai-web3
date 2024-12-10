@@ -1,0 +1,39 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+    
+    function hasValidFields(requiredFields) {
+      return request.resource.data.keys().hasAll(requiredFields);
+    }
+    
+    // Textures collection rules
+    match /textures/{textureId} {
+      allow read: if resource.data.isPublic || isOwner(resource.data.userId);
+      allow create: if isAuthenticated() 
+        && request.resource.data.userId == request.auth.uid
+        && hasValidFields(['name', 'url', 'settings']);
+      allow update, delete: if isOwner(resource.data.userId);
+    }
+    
+    // Users collection rules
+    match /users/{userId} {
+      allow read: if true;
+      allow create: if isAuthenticated() && request.auth.uid == userId;
+      allow update: if isOwner(userId);
+    }
+    
+    // Settings collection rules
+    match /settings/{settingId} {
+      allow read: if isAuthenticated();
+      allow write: if false; // Admin only via backend
+    }
+  }
+}
