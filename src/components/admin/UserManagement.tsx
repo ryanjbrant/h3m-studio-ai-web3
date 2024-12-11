@@ -1,6 +1,18 @@
 import React, { useEffect, useState } from 'react';
 import { Users, UserPlus, Shield, Trash2, Search, Download } from 'lucide-react';
 import { useAdminStore } from '../../store/adminStore';
+import { Timestamp } from 'firebase/firestore';
+
+interface User {
+  id: string;
+  email: string;
+  role: string;
+  disabled?: boolean;
+  walletConnected?: boolean;
+  downloads?: number;
+  lastVisit?: Timestamp;
+  createdAt?: Timestamp;
+}
 
 export const UserManagement: React.FC = () => {
   const { users, error, fetchUsers, updateUserRole } = useAdminStore();
@@ -19,7 +31,7 @@ export const UserManagement: React.FC = () => {
     }
   };
 
-  const filteredUsers = users.filter(user => {
+  const filteredUsers = (users as User[]).filter(user => {
     const matchesSearch = user.email.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesRole = !selectedRole || user.role === selectedRole;
     return matchesSearch && matchesRole;
@@ -34,8 +46,8 @@ export const UserManagement: React.FC = () => {
         user.disabled ? 'Disabled' : 'Active',
         user.walletConnected ? 'Yes' : 'No',
         user.downloads || 0,
-        user.lastVisit?.toLocaleDateString() || 'Never',
-        user.createdAt?.toLocaleDateString()
+        formatDate(user.lastVisit),
+        formatDate(user.createdAt)
       ].join(','))
     ].join('\n');
 
@@ -48,6 +60,11 @@ export const UserManagement: React.FC = () => {
     a.click();
     document.body.removeChild(a);
     window.URL.revokeObjectURL(url);
+  };
+
+  const formatDate = (timestamp?: Timestamp) => {
+    if (!timestamp) return 'Never';
+    return timestamp.toDate().toLocaleDateString();
   };
 
   return (
@@ -142,9 +159,7 @@ export const UserManagement: React.FC = () => {
                   </span>
                 </td>
                 <td className="py-3 px-4">{user.downloads || 0}</td>
-                <td className="py-3 px-4">
-                  {user.lastVisit?.toLocaleDateString() || 'Never'}
-                </td>
+                <td className="py-3 px-4">{formatDate(user.lastVisit)}</td>
                 <td className="py-3 px-4">
                   <div className="flex items-center gap-2">
                     <button 

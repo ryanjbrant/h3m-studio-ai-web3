@@ -79,11 +79,6 @@ export const useWeb3 = (): Web3State => {
       return;
     }
 
-    if (!window.ethereum.isMetaMask) {
-      setError('Please use MetaMask');
-      return;
-    }
-
     try {
       setIsConnecting(true);
       setError(null);
@@ -91,19 +86,30 @@ export const useWeb3 = (): Web3State => {
       // First switch to BSC network
       await checkAndSwitchChain();
 
-      // Then request accounts
+      // Then request accounts with proper error handling
       console.log('Requesting account access...');
-      const accounts = await window.ethereum.request({ 
-        method: 'eth_requestAccounts'
-      });
-      console.log('Accounts received:', accounts);
+      try {
+        const accounts = await window.ethereum.request({ 
+          method: 'eth_requestAccounts'
+        });
+        console.log('Accounts received:', accounts);
 
-      if (accounts.length === 0) {
-        throw new Error('No accounts found');
+        if (!accounts || accounts.length === 0) {
+          throw new Error('No accounts found');
+        }
+
+        setAddress(accounts[0]);
+        console.log('Connection successful:', accounts[0]);
+      } catch (err: any) {
+        if (err.code === -32002) {
+          setError('Please check MetaMask. Connection request already pending.');
+        } else if (err.code === 4001) {
+          setError('Please connect your wallet to continue.');
+        } else {
+          setError('Failed to connect wallet. Please try again.');
+        }
+        throw err;
       }
-
-      setAddress(accounts[0]);
-      console.log('Connection successful:', accounts[0]);
 
       // Verify we're still on BSC
       const chainId = await window.ethereum.request({ method: 'eth_chainId' });
@@ -113,7 +119,9 @@ export const useWeb3 = (): Web3State => {
       }
     } catch (err) {
       console.error('Connection error:', err);
-      setError(err instanceof Error ? err.message : 'Failed to connect wallet');
+      if (!error) { // Only set error if not already set
+        setError(err instanceof Error ? err.message : 'Failed to connect wallet');
+      }
     } finally {
       setIsConnecting(false);
     }
