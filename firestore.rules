@@ -41,7 +41,11 @@ service cloud.firestore {
     
     // Admin collection
     match /admin/{document=**} {
-      allow read, write: if isAdmin();
+      allow read: if isAdmin() || (
+        isAuthenticated() && 
+        request.auth.uid == resource.data.userId
+      );
+      allow write: if isAdmin();
     }
   }
 }

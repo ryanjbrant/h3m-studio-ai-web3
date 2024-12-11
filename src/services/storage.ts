@@ -7,7 +7,8 @@ import {
   where, 
   getDocs, 
   deleteDoc, 
-  Timestamp 
+  Timestamp, 
+  getDoc 
 } from 'firebase/firestore';
 import { storage, db } from '../config/firebase';
 import { MeshyPreviewTask } from '../types/meshy';
@@ -80,6 +81,29 @@ export async function saveGeneration(
       timestamp,
       expiresAt
     });
+
+    // Update user metrics
+    const userRef = doc(db, 'users', userId);
+    const userDoc = await getDoc(userRef);
+    const userData = userDoc.data() || {};
+    
+    const metrics = userData.generationMetrics || {
+      totalGenerations: 0,
+      lastGenerationDate: null,
+      generationsByType: {
+        text: 0,
+        image: 0
+      }
+    };
+
+    metrics.totalGenerations += 1;
+    metrics.lastGenerationDate = timestamp;
+    metrics.generationsByType[generationType] += 1;
+
+    await setDoc(userRef, { 
+      generationMetrics: metrics,
+      updatedAt: timestamp
+    }, { merge: true });
 
     console.log('Generation saved successfully');
   } catch (error) {
