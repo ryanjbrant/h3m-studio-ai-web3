@@ -1,5 +1,104 @@
 # h3m-studio-ai-web3
-# h3m-studio-ai-web3
+
+## Development Workflow
+
+### Standard Development Process
+1. **Start New Work**
+   ```bash
+   # Ensure you're up to date
+   git checkout development
+   git pull origin development
+   
+   # Create feature branch
+   git checkout -b feature/your-feature-name
+   ```
+
+2. **During Development**
+   - Make small, focused commits
+   - Keep changes atomic and related
+   - Update README.md if you've made:
+     - Architecture changes
+     - New dependencies
+     - API changes
+     - Configuration changes
+     - New features
+     - Workflow changes
+
+3. **Before Committing**
+   ```bash
+   # Review your changes
+   git status
+   git diff
+   
+   # Update README if needed
+   vim README.md  # Or your editor of choice
+   
+   # Stage and commit
+   git add .
+   git commit -m "type: Brief description
+   
+   - Detailed bullet points
+   - Explaining the changes
+   - And their impact"
+   ```
+
+4. **Commit Message Format**
+   ```
+   type: Subject line (50 chars max)
+   
+   - Detailed explanation point 1
+   - Impact of changes
+   - Breaking changes
+   - New dependencies
+   - Migration steps if any
+   ```
+   Types:
+   - feat: New feature
+   - fix: Bug fix
+   - docs: Documentation
+   - style: Formatting
+   - refactor: Code restructure
+   - test: Testing
+   - chore: Maintenance
+
+5. **Push Changes**
+   ```bash
+   # First push
+   git push -u origin feature/your-feature-name
+   
+   # Subsequent pushes
+   git push
+   ```
+
+6. **Create Pull Request**
+   - Create PR to development branch
+   - Fill out PR template
+   - Request reviews
+   - Address feedback
+
+### README Update Guidelines
+Always update README.md when you:
+- Add new environment variables
+- Change configuration files
+- Add new dependencies
+- Create new scripts
+- Change build process
+- Add new commands
+- Modify deployment steps
+- Change architecture
+- Add new features
+
+### Code Quality Checklist
+Before submitting PR:
+- [ ] Updated README if necessary
+- [ ] Added/Updated tests
+- [ ] Checked lint errors
+- [ ] Verified build succeeds
+- [ ] Tested locally
+- [ ] Updated dependencies
+- [ ] Added error handling
+- [ ] Included types
+- [ ] Documented complex logic
 
 ## GitHub Pipeline & Branching Strategy
 
