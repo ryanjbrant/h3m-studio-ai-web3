@@ -65,3 +65,49 @@ Thumbs.db
 serviceAccount.json# Build files
 build/
 
+# dependencies
+/node_modules
+/.pnp
+.pnp.js
+
+# testing
+/coverage
+
+# production
+/build
+/dist
+
+# misc
+.DS_Store
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+*.env
+
+# logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# secrets and credentials
+serviceAccount.json
+*serviceAccount*.json
+*.key
+*.pem
+.secret*
+credentials.json
+*credentials*.json
+firebase-adminsdk*.json
+
+# IDE
+.idea
+.vscode
+*.swp
+*.swo
+
+# Firebase
+.firebase/
+firebase-debug.log*
+

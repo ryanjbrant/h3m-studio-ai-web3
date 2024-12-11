@@ -6,6 +6,8 @@ import { PageTransition } from './components/PageTransition';
 import { LoadingSpinner } from './components/LoadingSpinner';
 import { useAuthStore } from './store/authStore';
 import { onAuthChange } from './services/auth';
+import { useAdmin } from './hooks/useAdmin';
+import Dashboard from './pages/admin/Dashboard';
 import './styles/theme.css';
 
 // Lazy load pages
@@ -23,14 +25,14 @@ const Vision = React.lazy(() => import('./pages/Vision'));
 const Team = React.lazy(() => import('./pages/Team'));
 const Login = React.lazy(() => import('./pages/Login'));
 const Profile = React.lazy(() => import('./pages/Profile'));
-const Dashboard = React.lazy(() => import('./pages/admin/Dashboard'));
 
 function App() {
-  const { setUser, setLoading, user } = useAuthStore();
+  const { setUser, setLoading } = useAuthStore();
+  const { isAdmin, loading: adminLoading } = useAdmin();
 
   useEffect(() => {
-    const unsubscribe = onAuthChange((user) => {
-      setUser(user);
+    const unsubscribe = onAuthChange(async (user) => {
+      await setUser(user);
       setLoading(false);
     });
 
@@ -115,7 +117,9 @@ function App() {
                 </PageTransition>
               } />
               <Route path="/admin/*" element={
-                user?.isAdmin ? (
+                adminLoading ? (
+                  <LoadingSpinner />
+                ) : isAdmin ? (
                   <PageTransition>
                     <Dashboard />
                   </PageTransition>

@@ -33,7 +33,7 @@ export const ModelViewer: React.FC<ModelViewerProps> = ({ modelUrl }) => {
           >
             <Suspense fallback={<DefaultModel />}>
               {modelUrl ? (
-                <LoadedModel url={modelUrl} />
+                <LoadedModel modelUrl={modelUrl} />
               ) : (
                 <DefaultModel />
               )}

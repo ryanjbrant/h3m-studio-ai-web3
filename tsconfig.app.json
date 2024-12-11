@@ -2,9 +2,10 @@
   "extends": "./tsconfig.json",
   "compilerOptions": {
     "composite": true,
-    "outDir": "./dist",
+    "outDir": "./public",
     "rootDir": "./src",
-    "types": ["vite/client"]
+    "types": ["vite/client"],
+    "declaration": true
   },
   "include": ["src"],
   "exclude": ["src/**/*.spec.ts"]

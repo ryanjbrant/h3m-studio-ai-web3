@@ -1,0 +1,1 @@
+[{"origin":["http://localhost:5173","https://h3m-studio-b17e2.web.app"],"method":["GET","PUT","POST","DELETE","HEAD"],"maxAgeSeconds":3600,"responseHeader":["Content-Type","Authorization","Content-Length","User-Agent","x-goog-resumable"]}]

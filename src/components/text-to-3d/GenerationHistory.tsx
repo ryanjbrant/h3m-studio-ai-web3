@@ -14,7 +14,7 @@ export const GenerationHistory: React.FC<GenerationHistoryProps> = ({
   onSelectTask,
 }) => {
   return (
-    <div className="w-64 h-full bg-[#121214] border-r border-[#242429] p-4 overflow-y-auto">
+    <div className="h-full overflow-y-auto">
       <h2 className="text-sm font-medium text-gray-400 mb-4">History</h2>
       <div className="grid grid-cols-2 gap-2">
         {tasks.map((task) => (

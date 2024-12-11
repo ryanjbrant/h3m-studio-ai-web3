@@ -6,9 +6,11 @@ import {
   signOut as firebaseSignOut,
   signInWithGoogle as firebaseSignInWithGoogle
 } from '../services/auth';
+import { doc, getDoc } from 'firebase/firestore';
+import { db } from '../config/firebase';
 
 interface AuthState {
-  user: User | null;
+  user: (User & { isAdmin?: boolean }) | null;
   loading: boolean;
   error: string | null;
   signIn: (email: string, password: string) => Promise<void>;
@@ -28,6 +30,11 @@ export const useAuthStore = create<AuthState>((set) => ({
     try {
       set({ loading: true, error: null });
       const user = await firebaseSignIn(email, password);
+      if (user) {
+        const userDoc = await getDoc(doc(db, 'users', user.uid));
+        const userData = userDoc.data();
+        (user as any).isAdmin = userData?.role === 'admin' || user.email === 'ryanjbrant@gmail.com';
+      }
       set({ user, loading: false });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to sign in';
@@ -39,6 +46,11 @@ export const useAuthStore = create<AuthState>((set) => ({
     try {
       set({ loading: true, error: null });
       const user = await firebaseSignUp(email, password);
+      if (user) {
+        const userDoc = await getDoc(doc(db, 'users', user.uid));
+        const userData = userDoc.data();
+        (user as any).isAdmin = userData?.role === 'admin' || user.email === 'ryanjbrant@gmail.com';
+      }
       set({ user, loading: false });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to sign up';
@@ -50,6 +62,11 @@ export const useAuthStore = create<AuthState>((set) => ({
     try {
       set({ loading: true, error: null });
       const user = await firebaseSignInWithGoogle();
+      if (user) {
+        const userDoc = await getDoc(doc(db, 'users', user.uid));
+        const userData = userDoc.data();
+        (user as any).isAdmin = userData?.role === 'admin' || user.email === 'ryanjbrant@gmail.com';
+      }
       set({ user, loading: false });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to sign in with Google';
@@ -68,7 +85,14 @@ export const useAuthStore = create<AuthState>((set) => ({
       throw error;
     }
   },
-  setUser: (user) => set({ user }),
+  setUser: async (user) => {
+    if (user) {
+      const userDoc = await getDoc(doc(db, 'users', user.uid));
+      const userData = userDoc.data();
+      (user as any).isAdmin = userData?.role === 'admin' || user.email === 'ryanjbrant@gmail.com';
+    }
+    set({ user });
+  },
   setLoading: (loading) => set({ loading }),
   setError: (error) => set({ error })
 }));

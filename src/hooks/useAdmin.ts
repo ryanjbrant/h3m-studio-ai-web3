@@ -20,7 +20,6 @@ export const useAdmin = () => {
         const userDoc = await getDoc(doc(db, 'users', user.uid));
         const userData = userDoc.data();
         
-        // Check if user is admin either by role or specific email
         setIsAdmin(
           userData?.role === 'admin' || 
           user.email === 'ryanjbrant@gmail.com'

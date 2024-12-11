@@ -1,137 +1,155 @@
-import React, { useState, Suspense } from 'react';
-import { createPreviewTask, getTaskStatus } from '../services/meshyApi';
-import { ModelViewer } from '../components/text-to-3d/ModelViewer';
-import { GenerationControls } from '../components/text-to-3d/GenerationControls';
-import { GenerationHistory } from '../components/text-to-3d/GenerationHistory';
-import { TaskProgress } from '../components/text-to-3d/TaskProgress';
-import { LoadingSpinner } from '../components/LoadingSpinner';
-import { ErrorBoundary } from '../components/ErrorBoundary';
+import React, { useState } from 'react';
+import { createPreviewTask } from '../services/meshyApi';
+import { LoadedModel } from '../components/text-to-3d/LoadedModel';
 import { MeshyPreviewTask } from '../types/meshy';
+import { ModelGenerationPanel } from '../components/text-to-3d/ModelGenerationPanel';
+import { GenerationHistorySidebar } from '../components/text-to-3d/GenerationHistorySidebar';
+import { GenerationData } from '../types/admin';
 
 interface GenerationSettings {
   prompt: string;
-  symmetry: 'off' | 'auto' | 'on';
-  useFixedSeed: boolean;
+  artStyle?: string;
+  negativePrompt?: string;
+  topology?: 'quad' | 'triangle';
+  targetPolycount?: 'adaptive' | 'low' | 'medium' | 'high' | 'ultra';
   seed?: number;
-  targetPolycount: 'adaptive' | 'low' | 'medium' | 'high' | 'ultra';
-  topology: 'quad' | 'triangle';
+  symmetry?: boolean;
+  useFixedSeed?: boolean;
 }
 
 const TextTo3D: React.FC = () => {
   const [tasks, setTasks] = useState<MeshyPreviewTask[]>([]);
-  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+  const [selectedTaskId, setSelectedTaskId] = useState<string | undefined>(undefined);
   const [isGenerating, setIsGenerating] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | undefined>(undefined);
+  const [currentTaskId, setCurrentTaskId] = useState<string | undefined>(undefined);
 
   const selectedTask = tasks.find(task => task.id === selectedTaskId);
-  const modelUrl = selectedTask?.status === 'SUCCEEDED' ? selectedTask.model_urls.glb : null;
+  const currentTask = tasks.find(task => task.id === currentTaskId);
 
-  const getPolycountValue = (setting: string): number | undefined => {
+  const getPolycountValue = (setting?: string): number | undefined => {
+    if (!setting || setting === 'adaptive') return undefined;
     const values = {
       low: 10000,
       medium: 30000,
       high: 50000,
       ultra: 100000
     };
-    return setting === 'adaptive' ? undefined : values[setting as keyof typeof values];
+    return values[setting as keyof typeof values];
   };
 
-  const handleGenerate = async (settings: GenerationSettings) => {
+  const handleGenerate = async (settings: GenerationSettings): Promise<string> => {
     try {
+      console.log('Starting text-to-3D generation:', settings);
       setIsGenerating(true);
-      setError(null);
-      setSelectedTaskId(null);
+      setError(undefined);
       
       const taskId = await createPreviewTask(
         settings.prompt,
-        'realistic',
-        undefined,
-        settings.topology,
+        settings.artStyle || 'realistic',
+        settings.negativePrompt || '',
+        settings.topology || 'quad',
         getPolycountValue(settings.targetPolycount),
         settings.useFixedSeed ? settings.seed : undefined
       );
-
-      const initialTask: MeshyPreviewTask = {
+      
+      console.log('Task created:', taskId);
+      
+      // Add placeholder task immediately
+      const placeholderTask: MeshyPreviewTask = {
         id: taskId,
-        prompt: settings.prompt,
-        status: 'PENDING',
-        progress: 0,
-        model_urls: { glb: '', fbx: '', usdz: '', obj: '', mtl: '' },
+        model_urls: { glb: '' },
         thumbnail_url: '',
-        video_url: '',
-        art_style: 'realistic',
-        negative_prompt: '',
+        prompt: settings.prompt,
+        art_style: settings.artStyle || 'realistic',
+        negative_prompt: settings.negativePrompt || '',
+        progress: 0,
+        status: 'PENDING',
         started_at: Date.now(),
         created_at: Date.now(),
         finished_at: 0,
         texture_urls: []
       };
-
-      setTasks(prev => [initialTask, ...prev]);
-
-      let currentTask = initialTask;
-      while (currentTask.status === 'PENDING' || currentTask.status === 'IN_PROGRESS') {
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        currentTask = await getTaskStatus(taskId);
-        setTasks(prev => prev.map(task => 
-          task.id === taskId ? currentTask : task
-        ));
-      }
-
-      if (currentTask.status === 'FAILED') {
-        throw new Error(currentTask.task_error?.message || 'Generation failed');
-      }
+      setTasks(prev => [placeholderTask, ...prev]);
+      setCurrentTaskId(taskId);
+      return taskId;
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'An error occurred');
+      console.error('Text-to-3D generation error:', err);
+      const message = err instanceof Error ? err.message : 'Failed to generate model';
+      setError(message);
+      throw err;
     } finally {
       setIsGenerating(false);
     }
   };
 
+  const handleTaskComplete = (task: MeshyPreviewTask) => {
+    console.log('Task completed:', task);
+    setTasks(prev => {
+      const existingTaskIndex = prev.findIndex(t => t.id === task.id);
+      if (existingTaskIndex >= 0) {
+        const newTasks = [...prev];
+        newTasks[existingTaskIndex] = task;
+        return newTasks;
+      }
+      return [task, ...prev];
+    });
+    setCurrentTaskId(task.id);
+    setIsGenerating(task.status !== 'SUCCEEDED' && task.status !== 'FAILED');
+  };
+
+  const handleSelectGeneration = (generation: GenerationData) => {
+    console.log('Selected generation:', generation);
+    // Convert GenerationData to MeshyPreviewTask format
+    const task: MeshyPreviewTask = {
+      id: generation.id,
+      model_urls: {
+        glb: generation.modelUrls.glb || '',
+        fbx: generation.modelUrls.fbx,
+        usdz: generation.modelUrls.usdz
+      },
+      thumbnail_url: generation.thumbnailUrl || '',
+      prompt: generation.prompt || '',
+      art_style: 'realistic',
+      negative_prompt: '',
+      progress: 100,
+      status: generation.status === 'complete' ? 'SUCCEEDED' : 'FAILED',
+      started_at: generation.timestamp.toMillis(),
+      created_at: generation.timestamp.toMillis(),
+      finished_at: generation.timestamp.toMillis(),
+      texture_urls: []
+    };
+    setTasks(prev => [task, ...prev.filter(t => t.id !== task.id)]);
+    setSelectedTaskId(task.id);
+  };
+
+  const handleSelectTask = (task: MeshyPreviewTask) => {
+    setSelectedTaskId(task.id);
+  };
+
   return (
-    <div className="h-[calc(100vh-44px)] flex flex-col">
-      <main className="flex-1 min-h-0 p-4">
-        <div className="flex gap-4 h-full">
-          <GenerationHistory
-            tasks={tasks}
-            selectedTaskId={selectedTaskId}
-            onSelectTask={(task: MeshyPreviewTask) => {
-              if (task.status === 'SUCCEEDED') {
-                setSelectedTaskId(task.id);
-              }
-            }}
+    <div className="h-[calc(100vh-4rem)] p-4">
+      <div className="flex h-full bg-[#0a0a0b] rounded-lg overflow-hidden">
+        <div className="w-80 border-r border-[#242429] h-full overflow-y-auto">
+          <GenerationHistorySidebar 
+            onSelectGeneration={handleSelectGeneration} 
+            currentTask={currentTask}
           />
-
-          <div className="flex-1 h-full bg-[#121214] rounded-lg border border-[#242429] overflow-hidden">
-            <ErrorBoundary FallbackComponent={({ error }) => (
-              <div className="w-full h-full flex items-center justify-center text-red-400">
-                <p>Error loading model: {error.message}</p>
-              </div>
-            )}>
-              <Suspense fallback={<LoadingSpinner />}>
-                <ModelViewer modelUrl={modelUrl} />
-              </Suspense>
-            </ErrorBoundary>
-          </div>
-
-          <div className="w-80 h-full space-y-4">
-            <GenerationControls 
-              onGenerate={handleGenerate}
-              disabled={isGenerating}
-            />
-
-            {error && (
-              <div className="bg-red-900/20 border border-red-900 rounded-lg p-4 text-red-400">
-                {error}
-              </div>
-            )}
-
-            {isGenerating && selectedTask && (
-              <TaskProgress progress={selectedTask.progress} />
-            )}
-          </div>
         </div>
-      </main>
+        <div className="flex-1 h-full">
+          <LoadedModel modelUrl={selectedTask?.model_urls.glb} />
+        </div>
+        <div className="w-96 border-l border-[#242429] h-full overflow-y-auto">
+          <ModelGenerationPanel
+            selectedTask={currentTask}
+            isGenerating={isGenerating}
+            error={error}
+            onGenerate={handleGenerate}
+            onModelGenerated={handleTaskComplete}
+            onTaskSelect={handleSelectTask}
+          />
+        </div>
+      </div>
     </div>
   );
 };
