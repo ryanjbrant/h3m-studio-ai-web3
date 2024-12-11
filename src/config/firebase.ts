@@ -1,7 +1,8 @@
 import { initializeApp } from 'firebase/app';
-import { getAuth, connectAuthEmulator } from 'firebase/auth';
+import { getAuth } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
+import { getAnalytics } from 'firebase/analytics';
 
 const firebaseConfig = {
   apiKey: "AIzaSyCUSBU0mdOyg1VoUR1Rb-KrdRS36jbVVLs",
@@ -22,10 +23,6 @@ auth.useDeviceLanguage();
 
 export const db = getFirestore(app);
 export const storage = getStorage(app);
-
-// Connect to emulators in development
-if (import.meta.env.DEV) {
-  connectAuthEmulator(auth, 'http://localhost:9099', { disableWarnings: true });
-}
+export const analytics = getAnalytics(app);
 
 export default app;
