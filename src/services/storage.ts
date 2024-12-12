@@ -1,16 +1,7 @@
 import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
-import { 
-  doc, 
-  setDoc, 
-  collection, 
-  query, 
-  where, 
-  getDocs, 
-  deleteDoc, 
-  Timestamp, 
-  getDoc 
-} from 'firebase/firestore';
+import { collection, query, where, getDocs, deleteDoc, Timestamp, getDoc, orderBy } from 'firebase/firestore';
 import { storage, db } from '../config/firebase';
+import { GenerationData } from '../types/generation';
 import { MeshyPreviewTask } from '../types/meshy';
 import { proxyFetchModel } from './meshyApi';
 
@@ -112,19 +103,20 @@ export async function saveGeneration(
   }
 }
 
-export async function getUserGenerations(userId: string) {
+export async function getUserGenerations(userId: string): Promise<GenerationData[]> {
   try {
     const q = query(
       collection(db, 'generations'),
       where('userId', '==', userId),
-      where('expiresAt', '>', Timestamp.now())
+      where('expiresAt', '>', Timestamp.now()),
+      orderBy('expiresAt', 'asc')
     );
 
     const querySnapshot = await getDocs(q);
     return querySnapshot.docs.map(doc => ({
       id: doc.id,
       ...doc.data()
-    }));
+    })) as GenerationData[];
   } catch (error) {
     console.error('Error fetching user generations:', error);
     throw error;
@@ -161,6 +153,68 @@ export async function deleteExpiredGenerations() {
     await Promise.all(deletePromises);
   } catch (error) {
     console.error('Error deleting expired generations:', error);
+    throw error;
+  }
+}
+
+export async function deleteGeneration(userId: string, generationId: string) {
+  try {
+    // Get the generation data first
+    const generationRef = doc(db, 'generations', generationId);
+    const generationDoc = await getDoc(generationRef);
+    const generationData = generationDoc.data();
+
+    if (!generationData) {
+      throw new Error('Generation not found');
+    }
+
+    // Check if user owns this generation
+    if (generationData.userId !== userId) {
+      throw new Error('Unauthorized to delete this generation');
+    }
+
+    // Delete files from storage
+    const deletePromises = [];
+
+    // Delete model files
+    for (const url of Object.values(generationData.modelUrls)) {
+      if (url) {
+        const fileRef = ref(storage, url);
+        deletePromises.push(deleteObject(fileRef));
+      }
+    }
+
+    // Delete thumbnail
+    if (generationData.thumbnailUrl) {
+      const thumbnailRef = ref(storage, generationData.thumbnailUrl);
+      deletePromises.push(deleteObject(thumbnailRef));
+    }
+
+    // Wait for all files to be deleted
+    await Promise.all(deletePromises);
+
+    // Delete the Firestore document
+    await deleteDoc(generationRef);
+
+    // Update user metrics
+    const userRef = doc(db, 'users', userId);
+    const userDoc = await getDoc(userRef);
+    const userData = userDoc.data() || {};
+    
+    if (userData.generationMetrics) {
+      const metrics = userData.generationMetrics;
+      metrics.totalGenerations = Math.max(0, metrics.totalGenerations - 1);
+      metrics.generationsByType[generationData.generationType] = 
+        Math.max(0, metrics.generationsByType[generationData.generationType] - 1);
+
+      await setDoc(userRef, { 
+        generationMetrics: metrics,
+        updatedAt: Timestamp.now()
+      }, { merge: true });
+    }
+
+  } catch (error) {
+    console.error('Error deleting generation:', error);
     throw error;
   }
 }
