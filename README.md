@@ -421,3 +421,47 @@ interface ProgressResponse {
    - Success: 202 Accepted
    - Error: Various status codes with descriptive messages
    - Task status must be polled until completion
+
+### Scene Builder Component
+The Scene Builder is a powerful 3D scene editor that allows users to manipulate and compose 3D models:
+
+1. **Core Features**
+   - Real-time 3D model viewing and manipulation
+   - Object transformation (position, rotation, scale)
+   - Material and lighting controls
+   - Camera orbit controls with constraints
+   - Selection and multi-object support
+
+2. **Implementation Files**
+   - Main component: `src/components/scene-builder/SceneBuilder.tsx`
+   - Object handler: `src/components/scene-builder/SceneObject.tsx`
+   - Scene controls: `src/components/scene-builder/SceneControls.tsx`
+
+3. **Key Components**
+   ```typescript
+   // Scene object data structure
+   interface SceneObjectData {
+     id: string;
+     type: 'model';
+     position: [number, number, number];
+     rotation: [number, number, number];
+     scale: [number, number, number];
+     modelUrl: string;
+   }
+   ```
+
+4. **Usage Example**
+   ```typescript
+   <SceneBuilder
+     initialModelUrl="path/to/model.glb"
+   />
+   ```
+
+5. **Features**
+   - Model loading through proxy server
+   - Automatic material optimization
+   - Shadow casting and receiving
+   - Environment lighting
+   - Grid helper for orientation
+   - Selection highlighting
+   - Transform controls

@@ -1,101 +1,84 @@
-import React, { useRef, useEffect, useState } from 'react';
-import { TransformControls } from '@react-three/drei';
-import { Object3D, Group, Mesh, Material } from 'three';
-import { useSceneStore } from '../../store/sceneStore';
-import { SceneObjectType } from '../../types/scene';
-import { loadModel } from '../../utils/modelLoader';
+/**
+ * SceneObject Component
+ * Renders and manages individual 3D models within the scene.
+ * Handles model loading, material setup, and interaction events.
+ */
+
+import { useEffect, useRef } from 'react';
+import { useGLTF } from '@react-three/drei';
+import { useThree } from '@react-three/fiber';
+import * as THREE from 'three';
+import { SceneObjectData } from './SceneBuilder';
 
 interface SceneObjectProps {
-  object: SceneObjectType;
-  transformMode: 'translate' | 'rotate' | 'scale' | null;
+  object: SceneObjectData;      // Object data containing position, rotation, scale, and model URL
+  isSelected: boolean;          // Whether this object is currently selected
+  onClick: () => void;          // Handler for object selection
+  onUpdate: (updates: Partial<SceneObjectData>) => void;  // Handler for object property updates
 }
 
-export const SceneObject: React.FC<SceneObjectProps> = ({ object, transformMode }) => {
-  const groupRef = useRef<Group>(null);
-  const [model, setModel] = useState<Object3D | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const updateObject = useSceneStore((state) => state.updateObject);
-  const setSelectedObjectId = useSceneStore((state) => state.setSelectedObjectId);
+export function SceneObject({ object, isSelected, onClick, onUpdate }: SceneObjectProps) {
+  console.log('SceneObject render:', { object, isSelected });
+  
+  // Load model through proxy to handle CORS and authentication
+  const proxyUrl = `http://localhost:3001/api/model?url=${encodeURIComponent(object.modelUrl)}`;
+  const { scene } = useGLTF(proxyUrl);
+  const groupRef = useRef<THREE.Group>(null);
+  const { invalidate } = useThree();
 
+  // Setup model materials and shadows when scene is loaded
   useEffect(() => {
-    let mounted = true;
-    let objectUrl: string | null = null;
-
-    const loadModelData = async () => {
-      try {
-        const loadedModel = await loadModel(object.url);
-        if (mounted) {
-          setModel(loadedModel);
-          setError(null);
-        }
-      } catch (err) {
-        if (mounted) {
-          console.error('Failed to load model:', err);
-          setError(err instanceof Error ? err.message : 'Failed to load model');
-        }
-      }
-    };
-
-    loadModelData();
-
-    return () => {
-      mounted = false;
-      if (objectUrl) {
-        URL.revokeObjectURL(objectUrl);
-      }
-      if (model) {
-        model.traverse((child) => {
-          if (child instanceof Mesh) {
-            if (child.geometry) {
-              child.geometry.dispose();
-            }
-            if (child.material) {
-              if (Array.isArray(child.material)) {
-                child.material.forEach((material: Material) => material.dispose());
-              } else {
-                child.material.dispose();
-              }
-            }
-          }
-        });
-      }
-    };
-  }, [object.url]);
-
-  const handleTransform = () => {
-    if (groupRef.current) {
-      const { position, rotation, scale } = groupRef.current;
-      updateObject(object.id, {
-        position: [position.x, position.y, position.z],
-        rotation: [rotation.x, rotation.y, rotation.z],
-        scale: [scale.x, scale.y, scale.z],
-      });
+    if (!scene) {
+      console.log('Scene not loaded yet for object:', object.id);
+      return;
     }
-  };
 
-  if (error) {
-    return null;
-  }
+    console.log('Processing scene for object:', object.id);
+    scene.traverse((child) => {
+      if (child instanceof THREE.Mesh) {
+        // Enable shadows for all meshes
+        child.castShadow = true;
+        child.receiveShadow = true;
+
+        // Configure materials for realistic rendering
+        if (child.material) {
+          const materials = Array.isArray(child.material) ? child.material : [child.material];
+          materials.forEach(material => {
+            if (material instanceof THREE.Material) {
+              material.roughness = 0.3;
+              material.metalness = 0.7;
+              material.envMapIntensity = 1;
+              material.needsUpdate = true;
+              material.side = THREE.DoubleSide;
+            }
+          });
+        }
+      }
+    });
+
+    // Cleanup function to clear loaded models from memory
+    return () => {
+      console.log('Cleaning up scene object:', object.id);
+      useGLTF.clear(proxyUrl);
+    };
+  }, [scene, proxyUrl, object.id]);
 
   return (
     <group
       ref={groupRef}
-      position={object.position}
-      rotation={object.rotation}
-      scale={object.scale}
+      position={new THREE.Vector3(...object.position)}
+      rotation={new THREE.Euler(...object.rotation)}
+      scale={new THREE.Vector3(...object.scale)}
       onClick={(e) => {
         e.stopPropagation();
-        setSelectedObjectId(object.id);
+        onClick();
       }}
     >
-      {transformMode && (
-        <TransformControls
-          mode={transformMode}
-          object={groupRef}
-          onObjectChange={handleTransform}
-        />
+      <primitive object={scene} />
+      {/* Show selection box around selected object */}
+      {isSelected && (
+        <boxHelper args={[scene, '#00ff00']} />
       )}
-      {model && <primitive object={model} />}
     </group>
   );
-};
+}
