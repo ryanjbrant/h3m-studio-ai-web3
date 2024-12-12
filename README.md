@@ -1,4 +1,4 @@
-# H3M Studio AI Web3 Platform
+# H3M Studio AI Web3
 
 ## System Architecture
 
@@ -180,11 +180,67 @@ Remember to update this documentation when making significant changes to the sys
 
 ## Critical API Integration Details
 
+### Text to 3D Implementation Requirements
+1. **API Configuration**
+   - Base URL: `https://api.meshy.ai`
+   - Text to 3D endpoint: `/v2/text-to-3d`
+   - Required headers:
+     ```typescript
+     {
+       'Authorization': `Bearer ${API_KEY}`,
+       'Content-Type': 'application/json',
+       'Accept': 'application/json'
+     }
+     ```
+
+2. **Required Request Parameters**
+   ```typescript
+   {
+     mode: 'preview',  // Required - must be lowercase
+     prompt: string,   // Required - object description
+     art_style: string, // Optional - e.g., 'realistic'
+     format: 'glb',    // Required for web compatibility
+   }
+   ```
+
+3. **Proxy Server Requirements**
+   - Local development endpoint: `/api/text-to-3d`
+   - Task status endpoint: `/api/task/:taskId`
+   - Required routes:
+     ```typescript
+     // Text to 3D generation
+     POST /api/text-to-3d
+     // Task status checking
+     GET /api/task/:taskId
+     ```
+
+4. **Implementation Files**
+   - Core API service: `src/services/meshyApi.ts`
+   - Proxy server: `server/proxy.ts`
+   - Main component: `src/components/text-to-3d/TextTo3D.tsx`
+   - Generation controls: `src/components/text-to-3d/GenerationControls.tsx`
+   - History sidebar: `src/components/text-to-3d/GenerationHistorySidebar.tsx`
+
+5. **Generation Flow**
+   1. Client sends request to local proxy (`/api/text-to-3d`)
+   2. Proxy forwards to Meshy API (`/v2/text-to-3d`)
+   3. Client polls task status via `/api/task/:taskId`
+   4. On completion, model is displayed and saved to history
+
+6. **Required Environment Variables**
+   ```env
+   VITE_MESHY_API_KEY=your_api_key_here
+   ```
+
 ### Meshy API Important Notes
-- **ALWAYS use V2 endpoints** - V1 is deprecated and lacks critical features
-- Base URL: `https://api.meshy.ai/v2`
+- Base URL: `https://api.meshy.ai`
+- Different endpoints use different versions:
+  - Text to 3D: v2
+  - Image to 3D: v1
+  - Text to Texture: v1
+  - Text to Voxel: v1
 - Authentication: Bearer token in headers
-- Rate limits: 100 requests per minute
+- Rate limits: 20 requests per second (default)
 
 ### Proxy Server Critical Points
 ```typescript
@@ -337,3 +393,31 @@ interface ProgressResponse {
    - Never expose API keys in frontend
    - Validate all user inputs
    - Implement proper access controls
+
+## Critical Implementation Notes
+
+### Image-to-3D Functionality
+**IMPORTANT: The following implementation details MUST be preserved for proper functionality:**
+
+1. Image Data Format
+   - Images MUST be sent as complete data URIs (format: `data:image/jpeg;base64,...`)
+   - DO NOT strip the data URI prefix as it's required by the API
+   - The API only accepts HTTP URLs or proper data URIs
+
+2. API Endpoints
+   - Development: `http://localhost:3001/api/image-to-3d`
+   - Production: `https://api.meshy.ai/v1/image-to-3d`
+   - Version v1 is required for image-to-3D (unlike text-to-3D which uses v2)
+
+3. Required Parameters
+   - `image_url`: Complete data URI of the image
+   - `mode`: Must be 'preview'
+   - `ai_model`: Must be 'meshy-4'
+   - `topology`: 'quad' (default) or 'triangle'
+   - `target_polycount`: Default 50000
+   - `enable_pbr`: Must be true
+
+4. Response Handling
+   - Success: 202 Accepted
+   - Error: Various status codes with descriptive messages
+   - Task status must be polled until completion

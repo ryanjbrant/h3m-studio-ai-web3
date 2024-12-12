@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
-import { Clock, Filter, SortDesc, Search, Wand2 } from 'lucide-react';
-import { GenerationData } from '../../types/admin';
+import { Clock, Filter, SortDesc, Search, Wand2, Trash2 } from 'lucide-react';
+import { GenerationData } from '../../types/generation';
 import { useAuthStore } from '../../store/authStore';
-import { getUserGenerations } from '../../services/admin';
+import { getUserGenerations, deleteGeneration } from '../../services/storage';
 import { MeshyPreviewTask } from '../../types/meshy';
 import { Timestamp } from 'firebase/firestore';
 
@@ -11,65 +11,66 @@ interface GenerationHistorySidebarProps {
   currentTask?: MeshyPreviewTask;
 }
 
-const ITEMS_PER_PAGE = 12;
-
 export function GenerationHistorySidebar({ onSelectGeneration, currentTask }: GenerationHistorySidebarProps) {
   const [generations, setGenerations] = useState<GenerationData[]>([]);
   const [loading, setLoading] = useState(false);
   const [sortBy, setSortBy] = useState<'date' | 'type'>('date');
   const [filterType, setFilterType] = useState<'all' | 'text' | 'image'>('all');
   const [searchQuery, setSearchQuery] = useState('');
-  const [currentPage, setCurrentPage] = useState(1);
-  const [lastDocId, setLastDocId] = useState<string | null>(null);
-  const [hasMore, setHasMore] = useState(true);
   const { user } = useAuthStore();
 
+  // Fetch generations whenever user changes
   useEffect(() => {
     async function fetchGenerations() {
       if (!user) return;
       
       try {
         setLoading(true);
-        const userGenerations = await getUserGenerations(user.uid, lastDocId);
-        
-        if (userGenerations.length < ITEMS_PER_PAGE) {
-          setHasMore(false);
-        }
-        
-        setGenerations(prev => lastDocId ? [...prev, ...userGenerations] : userGenerations);
-        
-        if (userGenerations.length > 0) {
-          setLastDocId(userGenerations[userGenerations.length - 1].id);
-        }
+        const userGenerations = await getUserGenerations(user.uid);
+        setGenerations(userGenerations.map(gen => ({
+          ...gen,
+          generationType: gen.generationType as 'text' | 'image'
+        })));
       } catch (err) {
-        console.debug('Error fetching generations:', err);
+        console.error('Error fetching generations:', err);
       } finally {
         setLoading(false);
       }
     }
 
     fetchGenerations();
-  }, [user, currentPage]);
+  }, [user]);
 
-  const allGenerations = [
-    ...(currentTask ? [{
-      id: currentTask.id,
-      userId: user?.uid || '',
-      generationType: 'text' as const,
-      prompt: currentTask.prompt,
-      timestamp: Timestamp.fromMillis(currentTask.created_at),
-      modelUrls: {
-        glb: currentTask.model_urls.glb,
-        usdz: currentTask.model_urls.usdz,
-        fbx: currentTask.model_urls.fbx
-      },
-      thumbnailUrl: currentTask.thumbnail_url,
-      status: currentTask.status === 'SUCCEEDED' ? 'complete' as const : 'pending' as const,
-      progress: currentTask.progress,
-      expiresAt: Timestamp.fromMillis(Date.now() + 30 * 24 * 60 * 60 * 1000) // 30 days
-    }] : []),
-    ...generations
-  ];
+  // Update generations when currentTask changes
+  useEffect(() => {
+    if (currentTask && user) {
+      const taskAsGeneration: GenerationData = {
+        id: currentTask.id,
+        userId: user.uid,
+        generationType: 'text',
+        prompt: currentTask.prompt,
+        timestamp: Timestamp.fromMillis(currentTask.created_at),
+        modelUrls: {
+          glb: currentTask.model_urls.glb || '',
+          usdz: currentTask.model_urls.usdz || '',
+          fbx: currentTask.model_urls.fbx || ''
+        },
+        thumbnailUrl: currentTask.thumbnail_url,
+        status: currentTask.status === 'SUCCEEDED' ? 'complete' : 'pending',
+        expiresAt: Timestamp.fromMillis(Date.now() + 30 * 24 * 60 * 60 * 1000)
+      };
+
+      setGenerations(prev => {
+        const exists = prev.some(g => g.id === taskAsGeneration.id);
+        if (!exists) {
+          return [taskAsGeneration, ...prev];
+        }
+        return prev.map(g => g.id === taskAsGeneration.id ? taskAsGeneration : g);
+      });
+    }
+  }, [currentTask, user]);
+
+  const allGenerations = generations;
 
   const filteredGenerations = allGenerations
     .filter(gen => {
@@ -89,6 +90,22 @@ export function GenerationHistorySidebar({ onSelectGeneration, currentTask }: Ge
 
   const showEmptyState = !loading && allGenerations.length === 0;
   const showNoResults = !loading && allGenerations.length > 0 && filteredGenerations.length === 0;
+
+  const handleDelete = async (generation: GenerationData, e: React.MouseEvent) => {
+    e.stopPropagation(); // Prevent selection when clicking delete
+    
+    if (!user) return;
+    
+    if (window.confirm('Are you sure you want to delete this generation? This cannot be undone.')) {
+      try {
+        await deleteGeneration(user.uid, generation.id);
+        setGenerations(prev => prev.filter(g => g.id !== generation.id));
+      } catch (error) {
+        console.error('Error deleting generation:', error);
+        alert('Failed to delete generation. Please try again.');
+      }
+    }
+  };
 
   return (
     <div className="h-full flex flex-col">
@@ -157,66 +174,69 @@ export function GenerationHistorySidebar({ onSelectGeneration, currentTask }: Ge
         ) : (
           <div className="space-y-2 p-2">
             {filteredGenerations.map(generation => (
-              <button
+              <div
                 key={generation.id}
-                onClick={() => onSelectGeneration?.(generation)}
-                className="w-full p-3 bg-[#0a0a0b] hover:bg-[#242429] rounded-lg transition-colors text-left"
+                className="w-full p-3 bg-[#0a0a0b] hover:bg-[#242429] rounded-lg transition-colors"
               >
                 <div className="flex items-start gap-3">
-                  {generation.thumbnailUrl ? (
-                    <img
-                      src={generation.thumbnailUrl}
-                      alt="Generation preview"
-                      className="w-16 h-16 object-cover rounded-lg bg-[#242429]"
-                    />
-                  ) : (
-                    <div className="w-16 h-16 rounded-lg bg-[#242429] flex items-center justify-center">
-                      {generation.status === 'pending' ? (
-                        <div className="animate-pulse w-8 h-8 rounded-full bg-[#363639]" />
+                  <button
+                    onClick={() => onSelectGeneration?.(generation)}
+                    className="flex-1 text-left"
+                  >
+                    <div className="flex items-start gap-3">
+                      {generation.thumbnailUrl ? (
+                        <img
+                          src={generation.thumbnailUrl}
+                          alt="Generation preview"
+                          className="w-16 h-16 object-cover rounded-lg bg-[#242429]"
+                        />
                       ) : (
-                        <div className="w-8 h-8 rounded-full bg-[#363639]" />
-                      )}
-                    </div>
-                  )}
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium truncate">
-                      {generation.prompt || 'No prompt'}
-                    </p>
-                    <div className="flex items-center gap-2 mt-1">
-                      <p className="text-xs text-gray-400">
-                        {generation.generationType} • {generation.status}
-                      </p>
-                      {generation.status === 'pending' && (
-                        <div className="h-1 flex-1 bg-[#242429] rounded-full overflow-hidden">
-                          <div
-                            className="h-full bg-blue-500 transition-all duration-300"
-                            style={{ width: `${generation.progress || 0}%` }}
-                          />
+                        <div className="w-16 h-16 rounded-lg bg-[#242429] flex items-center justify-center">
+                          {generation.status === 'pending' ? (
+                            <div className="animate-pulse w-8 h-8 rounded-full bg-[#363639]" />
+                          ) : (
+                            <div className="w-8 h-8 rounded-full bg-[#363639]" />
+                          )}
                         </div>
                       )}
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium truncate">
+                          {generation.prompt || 'No prompt'}
+                        </p>
+                        <div className="flex items-center gap-2 mt-1">
+                          <p className="text-xs text-gray-400">
+                            {generation.generationType} • {generation.status}
+                          </p>
+                          {generation.status === 'pending' && (
+                            <div className="h-1 flex-1 bg-[#242429] rounded-full overflow-hidden">
+                              <div
+                                className="h-full bg-blue-500 transition-all duration-300"
+                                style={{ width: `${generation.progress || 0}%` }}
+                              />
+                            </div>
+                          )}
+                        </div>
+                        <p className="text-xs text-gray-400 mt-1">
+                          {new Date(generation.timestamp.toMillis()).toLocaleString()}
+                        </p>
+                      </div>
                     </div>
-                    <p className="text-xs text-gray-400 mt-1">
-                      {new Date(generation.timestamp.toMillis()).toLocaleString()}
-                    </p>
-                  </div>
+                  </button>
+                  {generation.status === 'complete' && (
+                    <button
+                      onClick={(e) => handleDelete(generation, e)}
+                      className="p-2 hover:bg-red-500/20 rounded-lg transition-colors group"
+                      title="Delete Generation"
+                    >
+                      <Trash2 className="w-4 h-4 text-gray-400 group-hover:text-red-500" />
+                    </button>
+                  )}
                 </div>
-              </button>
+              </div>
             ))}
           </div>
         )}
       </div>
-
-      {hasMore && allGenerations.length > 0 && (
-        <div className="p-4 border-t border-[#242429]">
-          <button
-            onClick={() => setCurrentPage(prev => prev + 1)}
-            disabled={loading}
-            className="w-full py-2 bg-[#242429] hover:bg-[#2a2a2f] rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
-          >
-            {loading ? 'Loading...' : 'Load More'}
-          </button>
-        </div>
-      )}
     </div>
   );
 } 

@@ -1,13 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import { 
-  Users, UserPlus, Shield, Trash2, Search, Download, Eye, 
+  Users, UserPlus, Trash2, Search, Download, Eye, 
   Wallet, Box, Clock, BarChart2, Settings, AlertCircle,
-  ChevronDown, Filter, MoreVertical, Ban, CheckCircle, X, HardDrive
+  ChevronDown, X, HardDrive
 } from 'lucide-react';
 import { collection, query, where, getDocs, doc, updateDoc, deleteDoc, Timestamp } from 'firebase/firestore';
 import { db } from '../../config/firebase';
 import { Line } from 'react-chartjs-2';
-import { Chart as ChartJS } from 'chart.js/auto';
+import 'chart.js/auto';
 
 interface User {
   id: string;
@@ -21,7 +21,7 @@ interface User {
   displayName?: string;
   photoURL?: string;
   generationMetrics?: {
-    totalGenerations: number;
+    totalGenerations?: number;
     lastGenerationDate: Timestamp | null;
     generationsByType: {
       text: number;
@@ -192,7 +192,7 @@ export const UserManagement: React.FC = () => {
     }
   };
 
-  const handleSort = (key: keyof User) => {
+  const handleSort = (key: keyof User | 'generationMetrics.totalGenerations') => {
     setSortConfig(prev => ({
       key,
       direction: prev.key === key && prev.direction === 'asc' ? 'desc' : 'asc'
@@ -277,6 +277,13 @@ export const UserManagement: React.FC = () => {
       return matchesSearch && matchesRole && matchesStatus && matchesTab;
     })
     .sort((a, b) => {
+      if (sortConfig.key === 'generationMetrics.totalGenerations') {
+        const aValue = a.generationMetrics?.totalGenerations || 0;
+        const bValue = b.generationMetrics?.totalGenerations || 0;
+        const comparison = aValue < bValue ? -1 : 1;
+        return sortConfig.direction === 'asc' ? comparison : -comparison;
+      }
+
       const aValue = a[sortConfig.key as keyof User];
       const bValue = b[sortConfig.key as keyof User];
       
@@ -434,195 +441,201 @@ export const UserManagement: React.FC = () => {
 
         {/* User Table */}
         <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-[#242429]">
-                <th className="text-left py-3 px-4">
-                  <button
-                    onClick={() => handleSort('email')}
-                    className="flex items-center gap-1 hover:text-blue-500"
-                  >
-                    Email
-                    <ChevronDown className="w-4 h-4" />
-                  </button>
-                </th>
-                <th className="text-left py-3 px-4">Role</th>
-                <th className="text-left py-3 px-4">Status</th>
-                <th className="text-left py-3 px-4">Wallet</th>
-                <th className="text-left py-3 px-4">
-                  <button
-                    onClick={() => handleSort('generationMetrics.totalGenerations')}
-                    className="flex items-center gap-1 hover:text-blue-500"
-                  >
-                    Generations
-                    <ChevronDown className="w-4 h-4" />
-                  </button>
-                </th>
-                <th className="text-left py-3 px-4">
-                  <button
-                    onClick={() => handleSort('sceneCount')}
-                    className="flex items-center gap-1 hover:text-blue-500"
-                  >
-                    Scenes
-                    <ChevronDown className="w-4 h-4" />
-                  </button>
-                </th>
-                <th className="text-left py-3 px-4">
-                  <button
-                    onClick={() => handleSort('lastVisit')}
-                    className="flex items-center gap-1 hover:text-blue-500"
-                  >
-                    Last Visit
-                    <ChevronDown className="w-4 h-4" />
-                  </button>
-                </th>
-                <th className="text-left py-3 px-4">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredUsers.map((user) => (
-                <tr key={user.id} className="border-b border-[#242429]">
-                  <td className="py-3 px-4">
-                    <div className="flex items-center gap-3">
-                      {user.photoURL ? (
-                        <img
-                          src={user.photoURL}
-                          alt={user.displayName || user.email}
-                          className="w-8 h-8 rounded-full"
-                        />
-                      ) : (
-                        <div className="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center">
-                          {user.email[0].toUpperCase()}
-                        </div>
-                      )}
-                      <div>
-                        <p className="font-medium">{user.email}</p>
-                        {user.displayName && (
-                          <p className="text-sm text-gray-400">{user.displayName}</p>
-                        )}
-                      </div>
-                    </div>
-                  </td>
-                  <td className="py-3 px-4">
-                    <select
-                      value={user.role || 'user'}
-                      onChange={(e) => handleRoleChange(user.id, e.target.value)}
-                      className="bg-[#0a0a0b] border border-[#242429] rounded-lg px-2 py-1"
+          {loading ? (
+            <div className="flex justify-center items-center py-8">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500" />
+            </div>
+          ) : (
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-[#242429]">
+                  <th className="text-left py-3 px-4">
+                    <button
+                      onClick={() => handleSort('email')}
+                      className="flex items-center gap-1 hover:text-blue-500"
                     >
-                      <option value="user">User</option>
-                      <option value="admin">Admin</option>
-                      <option value="moderator">Moderator</option>
-                    </select>
-                  </td>
-                  <td className="py-3 px-4">
-                    <select
-                      value={user.status || 'active'}
-                      onChange={(e) => handleStatusChange(user.id, e.target.value)}
-                      className={`px-2 py-1 rounded-lg ${
-                        user.status === 'active'
-                          ? 'bg-green-500/10 text-green-500'
-                          : user.status === 'suspended'
-                          ? 'bg-red-500/10 text-red-500'
-                          : 'bg-yellow-500/10 text-yellow-500'
-                      }`}
+                      Email
+                      <ChevronDown className="w-4 h-4" />
+                    </button>
+                  </th>
+                  <th className="text-left py-3 px-4">Role</th>
+                  <th className="text-left py-3 px-4">Status</th>
+                  <th className="text-left py-3 px-4">Wallet</th>
+                  <th className="text-left py-3 px-4">
+                    <button
+                      onClick={() => handleSort('generationMetrics.totalGenerations')}
+                      className="flex items-center gap-1 hover:text-blue-500"
                     >
-                      <option value="active">Active</option>
-                      <option value="inactive">Inactive</option>
-                      <option value="suspended">Suspended</option>
-                    </select>
-                  </td>
-                  <td className="py-3 px-4">
-                    <span className={`px-2 py-1 rounded-full text-xs ${
-                      user.walletConnected ? 'bg-blue-500/10 text-blue-500' : 'bg-gray-500/10 text-gray-400'
-                    }`}>
-                      {user.walletConnected ? (
-                        <div className="flex items-center gap-1">
-                          <Wallet className="w-3 h-3" />
-                          Connected
-                        </div>
-                      ) : 'Not Connected'}
-                    </span>
-                  </td>
-                  <td className="py-3 px-4">
-                    <div className="flex items-center gap-2">
-                      <div>
-                        <span className="font-medium">{user.generationMetrics?.totalGenerations || 0}</span>
-                        {user.generationMetrics?.generationsByType && (
-                          <div className="text-xs text-gray-400 mt-1">
-                            <span className="mr-2">Text: {user.generationMetrics.generationsByType.text}</span>
-                            <span>Image: {user.generationMetrics.generationsByType.image}</span>
+                      Generations
+                      <ChevronDown className="w-4 h-4" />
+                    </button>
+                  </th>
+                  <th className="text-left py-3 px-4">
+                    <button
+                      onClick={() => handleSort('sceneCount')}
+                      className="flex items-center gap-1 hover:text-blue-500"
+                    >
+                      Scenes
+                      <ChevronDown className="w-4 h-4" />
+                    </button>
+                  </th>
+                  <th className="text-left py-3 px-4">
+                    <button
+                      onClick={() => handleSort('lastVisit')}
+                      className="flex items-center gap-1 hover:text-blue-500"
+                    >
+                      Last Visit
+                      <ChevronDown className="w-4 h-4" />
+                    </button>
+                  </th>
+                  <th className="text-left py-3 px-4">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredUsers.map((user) => (
+                  <tr key={user.id} className="border-b border-[#242429]">
+                    <td className="py-3 px-4">
+                      <div className="flex items-center gap-3">
+                        {user.photoURL ? (
+                          <img
+                            src={user.photoURL}
+                            alt={user.displayName || user.email}
+                            className="w-8 h-8 rounded-full"
+                          />
+                        ) : (
+                          <div className="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center">
+                            {user.email[0].toUpperCase()}
                           </div>
                         )}
+                        <div>
+                          <p className="font-medium">{user.email}</p>
+                          {user.displayName && (
+                            <p className="text-sm text-gray-400">{user.displayName}</p>
+                          )}
+                        </div>
                       </div>
-                      {user.generationMetrics?.totalGenerations > 0 && (
+                    </td>
+                    <td className="py-3 px-4">
+                      <select
+                        value={user.role || 'user'}
+                        onChange={(e) => handleRoleChange(user.id, e.target.value)}
+                        className="bg-[#0a0a0b] border border-[#242429] rounded-lg px-2 py-1"
+                      >
+                        <option value="user">User</option>
+                        <option value="admin">Admin</option>
+                        <option value="moderator">Moderator</option>
+                      </select>
+                    </td>
+                    <td className="py-3 px-4">
+                      <select
+                        value={user.status || 'active'}
+                        onChange={(e) => handleStatusChange(user.id, e.target.value)}
+                        className={`px-2 py-1 rounded-lg ${
+                          user.status === 'active'
+                            ? 'bg-green-500/10 text-green-500'
+                            : user.status === 'suspended'
+                            ? 'bg-red-500/10 text-red-500'
+                            : 'bg-yellow-500/10 text-yellow-500'
+                        }`}
+                      >
+                        <option value="active">Active</option>
+                        <option value="inactive">Inactive</option>
+                        <option value="suspended">Suspended</option>
+                      </select>
+                    </td>
+                    <td className="py-3 px-4">
+                      <span className={`px-2 py-1 rounded-full text-xs ${
+                        user.walletConnected ? 'bg-blue-500/10 text-blue-500' : 'bg-gray-500/10 text-gray-400'
+                      }`}>
+                        {user.walletConnected ? (
+                          <div className="flex items-center gap-1">
+                            <Wallet className="w-3 h-3" />
+                            Connected
+                          </div>
+                        ) : 'Not Connected'}
+                      </span>
+                    </td>
+                    <td className="py-3 px-4">
+                      <div className="flex items-center gap-2">
+                        <div>
+                          <span className="font-medium">{user.generationMetrics?.totalGenerations || 0}</span>
+                          {user.generationMetrics?.generationsByType && (
+                            <div className="text-xs text-gray-400 mt-1">
+                              <span className="mr-2">Text: {user.generationMetrics.generationsByType.text}</span>
+                              <span>Image: {user.generationMetrics.generationsByType.image}</span>
+                            </div>
+                          )}
+                        </div>
+                        {user.generationMetrics?.totalGenerations && user.generationMetrics.totalGenerations > 0 && (
+                          <button
+                            onClick={() => {
+                              setSelectedUser(user);
+                              setModal({ type: 'generations', userId: user.id });
+                            }}
+                            className="p-1 hover:bg-[#242429] rounded-lg transition-colors"
+                          >
+                            <Eye className="w-4 h-4 text-blue-500" />
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                    <td className="py-3 px-4">
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium">{user.sceneCount || 0}</span>
+                        {user.sceneCount && user.sceneCount > 0 && (
+                          <button
+                            onClick={() => {
+                              setSelectedUser(user);
+                              setModal({ type: 'scenes', userId: user.id });
+                            }}
+                            className="p-1 hover:bg-[#242429] rounded-lg transition-colors"
+                          >
+                            <Eye className="w-4 h-4 text-blue-500" />
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                    <td className="py-3 px-4">{formatDate(user.lastVisit)}</td>
+                    <td className="py-3 px-4">
+                      <div className="flex items-center gap-2">
                         <button
                           onClick={() => {
                             setSelectedUser(user);
-                            setModal({ type: 'generations', userId: user.id });
+                            setModal({ type: 'activity', userId: user.id });
+                            fetchUserActivity(user.id);
                           }}
                           className="p-1 hover:bg-[#242429] rounded-lg transition-colors"
+                          title="View Activity"
                         >
-                          <Eye className="w-4 h-4 text-blue-500" />
+                          <BarChart2 className="w-4 h-4 text-blue-500" />
                         </button>
-                      )}
-                    </div>
-                  </td>
-                  <td className="py-3 px-4">
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium">{user.sceneCount || 0}</span>
-                      {user.sceneCount > 0 && (
                         <button
                           onClick={() => {
                             setSelectedUser(user);
-                            setModal({ type: 'scenes', userId: user.id });
+                            setModal({ type: 'settings', userId: user.id });
                           }}
                           className="p-1 hover:bg-[#242429] rounded-lg transition-colors"
+                          title="User Settings"
                         >
-                          <Eye className="w-4 h-4 text-blue-500" />
+                          <Settings className="w-4 h-4 text-gray-400" />
                         </button>
-                      )}
-                    </div>
-                  </td>
-                  <td className="py-3 px-4">{formatDate(user.lastVisit)}</td>
-                  <td className="py-3 px-4">
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => {
-                          setSelectedUser(user);
-                          setModal({ type: 'activity', userId: user.id });
-                          fetchUserActivity(user.id);
-                        }}
-                        className="p-1 hover:bg-[#242429] rounded-lg transition-colors"
-                        title="View Activity"
-                      >
-                        <BarChart2 className="w-4 h-4 text-blue-500" />
-                      </button>
-                      <button
-                        onClick={() => {
-                          setSelectedUser(user);
-                          setModal({ type: 'settings', userId: user.id });
-                        }}
-                        className="p-1 hover:bg-[#242429] rounded-lg transition-colors"
-                        title="User Settings"
-                      >
-                        <Settings className="w-4 h-4 text-gray-400" />
-                      </button>
-                      <button
-                        onClick={() => {
-                          setSelectedUser(user);
-                          setShowDeleteConfirm(true);
-                        }}
-                        className="p-1 hover:bg-red-500/20 rounded-lg transition-colors"
-                        title="Delete User"
-                      >
-                        <Trash2 className="w-4 h-4 text-red-500" />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                        <button
+                          onClick={() => {
+                            setSelectedUser(user);
+                            setShowDeleteConfirm(true);
+                          }}
+                          className="p-1 hover:bg-red-500/20 rounded-lg transition-colors"
+                          title="Delete User"
+                        >
+                          <Trash2 className="w-4 h-4 text-red-500" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
         </div>
       </div>
 

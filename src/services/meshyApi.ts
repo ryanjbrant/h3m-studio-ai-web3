@@ -1,10 +1,18 @@
 import { MeshyPreviewTask } from '../types/meshy';
 
+// IMPORTANT: Required configuration for text-to-3D functionality
 const IS_DEV = import.meta.env.DEV;
 const PROXY_URL = 'http://localhost:3001';
 const MESHY_API_URL = 'https://api.meshy.ai';
 const API_BASE_URL = IS_DEV ? `${PROXY_URL}/api` : MESHY_API_URL;
 const API_KEY = import.meta.env.VITE_MESHY_API_KEY;
+
+// IMPORTANT: Required headers for Meshy API requests
+const headers = {
+  'Authorization': `Bearer ${API_KEY}`,
+  'Content-Type': 'application/json',
+  'Accept': 'application/json'
+};
 
 interface MeshyError {
   endpoint: string;
@@ -21,11 +29,7 @@ function logMeshyError(error: MeshyError) {
   });
 }
 
-const headers = {
-  'Authorization': `Bearer ${API_KEY}`,
-  'Content-Type': 'application/json',
-};
-
+// IMPORTANT: Core text-to-3D generation function
 export async function createPreviewTask(
   prompt: string, 
   artStyle: string, 
@@ -34,15 +38,20 @@ export async function createPreviewTask(
   targetPolycount?: number,
   seed?: number
 ) {
-  const url = IS_DEV ? `${PROXY_URL}/api/text2mesh` : `${MESHY_API_URL}/v2/text-to-3d`;
+  // IMPORTANT: Correct endpoint for text-to-3D requests
+  const url = IS_DEV ? `${PROXY_URL}/api/text-to-3d` : `${MESHY_API_URL}/v2/text-to-3d`;
+  
+  // IMPORTANT: Required parameters for text-to-3D generation
   const requestData = {
-    prompt,
-    art_style: artStyle,
+    mode: 'preview',  // Required - must be lowercase
+    prompt,          // Required - object description
+    art_style: artStyle,  // Optional
+    format: 'glb',   // Required for web compatibility
+    // Additional optional parameters
     negative_prompt: negativePrompt,
     topology,
     target_polycount: targetPolycount,
     seed,
-    mode: 'preview',
     enable_pbr: true,
     ai_model: 'meshy-4'
   };
@@ -79,46 +88,14 @@ export async function createPreviewTask(
   }
 }
 
-export const getTaskStatus = async (taskId: string): Promise<MeshyPreviewTask> => {
-  const url = `${API_BASE_URL}/text2mesh/${taskId}`;
-  console.log('Getting task status:', { url, taskId });
-  
-  try {
-    const response = await fetch(url, {
-      headers
-    });
-    if (!response.ok) {
-      throw new Error(`Failed to get task status: ${response.statusText}`);
-    }
-    
-    const data = await response.json();
-    console.log('Task status response:', data);
-    
-    if (!data) {
-      throw new Error('Invalid task status response');
-    }
-    
-    // Convert the direct response to MeshyPreviewTask format
-    return {
-      id: data.id,
-      model_urls: data.model_urls || {},
-      thumbnail_url: data.thumbnail_url || '',
-      prompt: data.prompt || '',
-      art_style: data.art_style || 'realistic',
-      negative_prompt: data.negative_prompt || '',
-      progress: data.progress || 0,
-      status: data.status || 'PENDING',
-      task_error: data.task_error,
-      started_at: data.started_at || Date.now(),
-      created_at: data.created_at || Date.now(),
-      finished_at: data.finished_at || Date.now(),
-      texture_urls: data.texture_urls || []
-    };
-  } catch (error) {
-    console.error('Error getting task status:', error);
-    throw error;
-  }
-};
+export async function getTaskStatus(taskId: string): Promise<MeshyPreviewTask> {
+  const url = `${API_BASE_URL}/task/${taskId}`;
+  const response = await fetch(url, {
+    headers
+  });
+  const data = await response.json();
+  return data;
+}
 
 export async function proxyFetchModel(url: string): Promise<ArrayBuffer> {
   try {
@@ -173,6 +150,10 @@ export async function proxyFetchModel(url: string): Promise<ArrayBuffer> {
   }
 };
 
+// CRITICAL: Image-to-3D Implementation
+// WARNING: The following implementation MUST be preserved exactly as is
+// DO NOT modify the image data handling or API parameters unless enhancing functionality
+// The data URI prefix MUST be preserved for the API to work correctly
 export async function createImageTo3DTask(
   image: File,
   options: {
@@ -187,43 +168,61 @@ export async function createImageTo3DTask(
       options 
     });
 
-    // Convert image file to base64
-    const base64 = await new Promise<string>((resolve) => {
+    // CRITICAL: Image must be converted to a complete data URI
+    // DO NOT remove the data URI prefix (e.g., "data:image/jpeg;base64,")
+    const base64Data = await new Promise<string>((resolve, reject) => {
       const reader = new FileReader();
-      reader.onloadend = () => {
-        resolve(reader.result as string);
+      reader.onload = () => {
+        const result = reader.result as string;
+        // IMPORTANT: Keep the full data URI - required by the API
+        resolve(result);
       };
+      reader.onerror = reject;
       reader.readAsDataURL(image);
     });
 
-    const url = IS_DEV ? `${PROXY_URL}/api/image-to-3d` : `${MESHY_API_URL}/v2/image-to-3d`;
+    // CRITICAL: API version must be v1 for image-to-3D
+    const url = IS_DEV ? `${PROXY_URL}/api/image-to-3d` : `${MESHY_API_URL}/v1/image-to-3d`;
+    
+    // CRITICAL: These parameters MUST be provided exactly as shown
     const requestData = {
-      image_url: base64,
-      mode: 'preview',
-      ai_model: 'meshy-4',
-      topology: options.topology,
-      target_polycount: options.targetPolycount,
-      enable_pbr: true
+      image_url: base64Data,  // MUST be complete data URI
+      mode: 'preview',        // MUST be 'preview'
+      ai_model: 'meshy-4',    // MUST be 'meshy-4'
+      topology: options.topology || 'quad',
+      target_polycount: options.targetPolycount || 50000,
+      enable_pbr: true        // MUST be true
     };
+
+    console.log('Sending request to:', url, {
+      ...requestData,
+      image_url: '[DATA_URI]' // Log without actual image data
+    });
 
     const response = await fetch(url, {
       method: 'POST',
-      headers,
-      body: JSON.stringify(requestData),
+      headers: {
+        ...headers,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(requestData)
     });
 
-    const data = await response.json();
-    console.log('Image-to-3D task response:', { status: response.status, data });
-
     if (!response.ok) {
-      logMeshyError({
-        endpoint: 'createImageTo3DTask',
-        requestData: { ...requestData, image_url: '[BASE64_DATA]' },
-        responseStatus: response.status,
-        responseData: data,
+      const errorData = await response.json().catch(() => ({}));
+      console.error('Image-to-3D task error:', {
+        status: response.status,
+        statusText: response.statusText,
+        data: errorData
       });
-      throw new Error(data.message || 'Failed to create image-to-3D task');
+      throw new Error(errorData.message || errorData.error || 'Failed to create image-to-3D task');
     }
+
+    const data = await response.json();
+    console.log('Image-to-3D task response:', { 
+      status: response.status, 
+      data: { ...data, result: data.result ? '[TRUNCATED]' : undefined }
+    });
 
     return data.result;
   } catch (error) {

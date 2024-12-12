@@ -1,5 +1,5 @@
 import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
-import { collection, query, where, getDocs, deleteDoc, Timestamp, getDoc, orderBy } from 'firebase/firestore';
+import { collection, query, where, getDocs, deleteDoc, Timestamp, getDoc, orderBy, doc, setDoc } from 'firebase/firestore';
 import { storage, db } from '../config/firebase';
 import { GenerationData } from '../types/generation';
 import { MeshyPreviewTask } from '../types/meshy';
@@ -178,7 +178,7 @@ export async function deleteGeneration(userId: string, generationId: string) {
 
     // Delete model files
     for (const url of Object.values(generationData.modelUrls)) {
-      if (url) {
+      if (url && typeof url === 'string') {
         const fileRef = ref(storage, url);
         deletePromises.push(deleteObject(fileRef));
       }

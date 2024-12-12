@@ -3,11 +3,16 @@ import { Timestamp } from 'firebase/firestore';
 export interface GenerationData {
   id: string;
   userId: string;
-  generationType: string;
+  generationType: 'text' | 'image';
   timestamp: Timestamp;
   expiresAt: Timestamp;
-  modelUrls: Record<string, string>;
+  modelUrls: {
+    glb?: string;
+    usdz?: string;
+    fbx?: string;
+  };
   thumbnailUrl?: string;
   prompt?: string;
-  status: 'pending' | 'completed' | 'failed';
+  status: 'pending' | 'complete' | 'failed';
+  progress?: number;
 } 

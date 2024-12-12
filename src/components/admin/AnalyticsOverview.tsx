@@ -18,8 +18,6 @@ import {
   Legend,
   Filler
 } from 'chart.js';
-import { analytics } from '../../config/firebase';
-import { getAnalytics, logEvent } from 'firebase/analytics';
 
 // Register ChartJS components
 ChartJS.register(
