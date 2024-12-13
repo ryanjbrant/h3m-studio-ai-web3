@@ -198,9 +198,9 @@ export function SceneBuilder({ initialModelUrl }: SceneBuilderProps) {
     const initial = initialModelUrl ? [{
       id: 'initial-model',
       type: 'model' as const,
-      position: [0, 0, 0],
+      position: [0, 0, 0] as [number, number, number],
       rotation: [0, 0, 0] as [number, number, number],
-      scale: [1, 1, 1],
+      scale: [1, 1, 1] as [number, number, number],
       modelUrl: initialModelUrl
     }] : [];
     console.log('Initializing scene with objects:', initial);
