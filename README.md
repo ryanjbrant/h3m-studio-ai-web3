@@ -465,3 +465,60 @@ The Scene Builder is a powerful 3D scene editor that allows users to manipulate 
    - Grid helper for orientation
    - Selection highlighting
    - Transform controls
+
+## Recent Updates & Important Guidelines
+
+### Environment Map Integration
+- Successfully integrated environment map loading using EXR files
+- Environment maps are loaded from Firebase Storage
+- Proper error handling for environment map loading failures
+- Environment maps enhance model lighting and reflections
+
+### Model Viewer Improvements
+- Implemented proper OrbitControls configuration
+  - Disabled panning for better user experience
+  - Limited rotation angles for optimal viewing
+  - Adjusted zoom constraints
+- Added loading indicators for model loading states
+- Improved error boundaries for better error handling
+
+### Drag & Drop Implementation
+- Added support for GLB model drag and drop
+- Proper file type validation
+- Progress indicators during upload
+- Error handling for failed uploads
+- Automatic model display after successful upload
+
+### Performance Optimizations
+- Implemented proper cleanup of Three.js resources
+- Memory management for textures and materials
+- Optimized model loading and unloading
+- Proper disposal of WebGL contexts
+
+### Important Guidelines
+1. **Resource Cleanup**
+   - Always dispose of materials and textures when removing models
+   - Use proper cleanup in useEffect hooks
+   - Handle WebGL context loss and recovery
+
+2. **Error Handling**
+   - Implement error boundaries for 3D components
+   - Provide user feedback for loading states
+   - Handle failed model loads gracefully
+
+3. **Performance**
+   - Monitor memory usage with large models
+   - Implement proper loading states
+   - Use proper Three.js disposal methods
+
+4. **Firebase Integration**
+   - Follow proper storage path conventions
+   - Implement proper security rules
+   - Handle upload/download errors appropriately
+
+### Known Limitations
+- Texture application to models is currently under development
+- Some WebGL context loss scenarios may require page refresh
+- Large model files may cause performance issues
+
+Remember to follow these guidelines when making changes to the 3D components and always test thoroughly before deployment.
