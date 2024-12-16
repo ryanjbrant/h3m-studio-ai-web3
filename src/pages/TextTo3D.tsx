@@ -230,7 +230,7 @@ const TextTo3D: React.FC = () => {
             </div>
           ) : (
             <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 text-gray-400 text-sm">
-              {selectedTask ? `Current status: ${selectedTask.status}` : 'No model selected'}
+              {selectedTask ? `Model: ${selectedTask.prompt || 'Untitled'}` : 'No model selected'}
             </div>
           )}
           {sceneTransitionError && (

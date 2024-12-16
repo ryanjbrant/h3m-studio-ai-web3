@@ -523,135 +523,250 @@ The Scene Builder is a powerful 3D scene editor that allows users to manipulate 
 
 Remember to follow these guidelines when making changes to the 3D components and always test thoroughly before deployment.
 
-## Model Viewing System
+## Model Viewing System Technical Guide
 
-The application features a robust 3D model viewing system with multiple viewing modes and capabilities:
+### Core Architecture
 
-### Core Components
-
-1. **LoadedModel Component** (`src/components/text-to-3d/LoadedModel.tsx`)
-   - Main container for model viewing functionality
-   - Handles model loading, viewing modes, and material display
-   - Manages the unified toolbar interface
-
-2. **ViewportCanvas Component**
-   - Renders individual 3D viewports
-   - Handles camera setup and controls
-   - Provides loading states and error boundaries
-
-3. **ModelViewer Component**
-   - Manages multiple viewport configurations
-   - Handles 4-up view layout
-   - Controls camera positions and orientations
-
-### Viewing Modes
-
-1. **Single View Mode**
-   - Default perspective view
-   - Full-screen single viewport
-   - Interactive orbit controls
-   - Camera Position: [5, 5, 5]
-
-2. **4-Up View Mode**
-   - Four synchronized viewports:
-     - Perspective (Position: [5, 5, 5])
-     - Top (Position: [0, 10, 0], Orthographic)
-     - Front (Position: [0, 0, 10], Orthographic)
-     - Right (Position: [10, 0, 0], Orthographic)
-   - Each view has independent camera controls
-
-3. **Scene Mode**
-   - Full scene editing capabilities
-   - Grid helper for orientation
-   - Support for multiple models
-   - Transform controls for object manipulation
-
-### Material Display Options
-
-1. **Shaded Mode**
-   - Default material display
-   - MeshStandardMaterial with:
-     - Metalness: 0.5
-     - Roughness: 0.5
-     - Default white color
-
-2. **Wireframe Mode**
-   - Toggle for wireframe display
-   - Maintains material properties
-   - Useful for geometry inspection
-
-### Key Features
-
-1. **Model Loading**
-   - Automatic model centering
-   - Proper scale management
-   - Memory cleanup on unmount
-   - Preloading for performance
-
-2. **Error Handling**
-   - Comprehensive error boundaries
-   - Loading state management
-   - Graceful fallbacks
-
-3. **Performance Optimizations**
-   - Efficient material updates
-   - Memory management
-   - Context preservation
-   - Proper cleanup
-
-### Usage Guidelines
-
-1. **Model Loading**
+1. **Main Components**
    ```typescript
+   // LoadedModel.tsx - Main container component
    <LoadedModel
-     modelUrl="path/to/model.glb"
+     modelUrl="path/to/model.glb"     // URL to GLB model
+     displayMode="shaded"             // 'shaded' | 'wireframe'
+     currentView="model"              // 'model' | 'scene'
+   />
+
+   // Model.tsx - Individual model renderer
+   <Model
+     url="path/to/model.glb"
+     displayMode="shaded"             // Controls wireframe mode
+   />
+
+   // SceneBuilder.tsx - Scene view renderer
+   <SceneBuilder
+     initialModelUrl="path/to/model.glb"
+     isMultiView={false}
      displayMode="shaded"
-     currentView="model"
    />
    ```
 
-2. **View Switching**
-   - Use toolbar buttons to switch between:
-     - Model/Scene views
-     - Single/4-up layouts
-     - Material display modes
+2. **View Modes**
+   - Model View: Direct model display with basic transformations
+   - Scene View: Full scene editing with transform controls
+   - 4-Up View: Multiple camera angles in both modes
 
-3. **Best Practices**
-   - Ensure models are in GLB format
-   - Use proper lighting setup
-   - Clean up resources when unmounting
-   - Handle WebGL context properly
+### Model Loading Process
 
-### Technical Considerations
+1. **Initial Load**
+   ```typescript
+   // Model preloading in LoadedModel.tsx
+   useEffect(() => {
+     if (modelUrl) {
+       useGLTF.preload(modelUrl);
+     }
+     return () => {
+       if (modelUrl) {
+         useGLTF.clear(modelUrl);
+       }
+     };
+   }, [modelUrl]);
+   ```
 
-1. **WebGL Context**
-   - Single THREE.js instance
-   - Proper context management
-   - Memory cleanup
+2. **Model Centering**
+   ```typescript
+   // Automatic centering in Model component
+   onUpdate={(self: THREE.Object3D) => {
+     const box = new THREE.Box3().setFromObject(self);
+     const center = box.getCenter(new THREE.Vector3());
+     self.position.sub(center);
+   }}
+   ```
 
-2. **Camera Setup**
-   - Perspective camera for main view
-   - Orthographic cameras for side views
-   - Proper aspect ratio handling
+3. **Material Handling**
+   ```typescript
+   // Material preservation and wireframe toggle
+   useEffect(() => {
+     model.scene.traverse((child: THREE.Object3D) => {
+       if (child instanceof THREE.Mesh && child.material) {
+         const materials = Array.isArray(child.material) 
+           ? child.material 
+           : [child.material];
+         materials.forEach(material => {
+           if (material) {
+             material.wireframe = displayMode === 'wireframe';
+             material.needsUpdate = true;
+           }
+         });
+       }
+     });
+   }, [displayMode, model.scene]);
+   ```
 
-3. **Resource Management**
-   - Model preloading/unloading
-   - Material disposal
-   - Memory cleanup
+### Camera Configuration
 
-### Troubleshooting
+1. **Perspective View**
+   ```typescript
+   {
+     position: [3, 3, 3],
+     near: 0.1,
+     far: 1000,
+     fov: 45
+   }
+   ```
+
+2. **Orthographic Views**
+   ```typescript
+   // Top View
+   {
+     position: [0, 5, 0],
+     rotation: [-Math.PI / 2, 0, 0],
+     orthographic: true,
+     zoom: 100
+   }
+
+   // Front View
+   {
+     position: [0, 0, 5],
+     orthographic: true,
+     zoom: 100
+   }
+
+   // Right View
+   {
+     position: [5, 0, 0],
+     rotation: [0, -Math.PI / 2, 0],
+     orthographic: true,
+     zoom: 100
+   }
+   ```
+
+### Controls Configuration
+
+1. **Orbit Controls**
+   ```typescript
+   <OrbitControls
+     makeDefault
+     enableDamping
+     dampingFactor={0.05}
+     minDistance={1}
+     maxDistance={10}
+     minPolarAngle={0}
+     maxPolarAngle={Math.PI / 2}
+     enableRotate={!camera.orthographic}
+     enableZoom={true}
+     target={[0, 0, 0]}
+   />
+   ```
+
+### Scene Mode Features
+
+1. **Object Management**
+   ```typescript
+   interface SceneObjectData {
+     id: string;
+     type: 'model';
+     position: [number, number, number];
+     rotation: [number, number, number];
+     scale: [number, number, number];
+     modelUrl: string;
+   }
+   ```
+
+2. **Lighting Setup**
+   ```typescript
+   <ambientLight intensity={0.5} />
+   <directionalLight
+     position={[5, 5, 5]}
+     intensity={1}
+     castShadow
+   />
+   ```
+
+### Common Issues & Solutions
 
 1. **Model Not Appearing**
-   - Verify model URL is correct
-   - Check model format (GLB preferred)
+   - Verify model URL is correct and accessible
    - Ensure proper cleanup on unmount
+   - Check camera positions and FOV
+   - Verify material settings
 
-2. **Performance Issues**
-   - Use proper material settings
-   - Manage memory appropriately
-   - Clean up unused resources
+2. **Material/Texture Issues**
+   - Don't override original materials unless necessary
+   - Only modify wireframe property when changing display mode
+   - Ensure material.needsUpdate is set after changes
 
-3. **View Problems**
-   - Verify camera positions
-   - Check orthographic settings
-   - Ensure proper aspect ratios
+3. **Camera Problems**
+   - Use consistent near/far planes across views
+   - Set appropriate zoom for orthographic cameras
+   - Maintain proper aspect ratios
+
+4. **Performance Optimization**
+   - Preload models using useGLTF.preload
+   - Clean up resources on unmount
+   - Use proper material disposal
+   - Maintain single THREE.js instance
+
+### Integration Guidelines
+
+1. **Adding New Models**
+   ```typescript
+   // 1. Preload the model
+   useGLTF.preload(modelUrl);
+
+   // 2. Add to scene or model view
+   <Model url={modelUrl} displayMode={displayMode} />
+
+   // 3. Clean up when done
+   useGLTF.clear(modelUrl);
+   ```
+
+2. **Switching Views**
+   ```typescript
+   // Toggle between model and scene views
+   const [viewMode, setViewMode] = useState<'model' | 'scene'>(currentView);
+
+   // Toggle between single and 4-up views
+   const [isMultiView, setIsMultiView] = useState(false);
+   ```
+
+3. **Material Updates**
+   ```typescript
+   // Update materials while preserving textures
+   self.traverse((child: THREE.Object3D) => {
+     if (child instanceof THREE.Mesh && child.material) {
+       const materials = Array.isArray(child.material) 
+         ? child.material 
+         : [child.material];
+       materials.forEach(material => {
+         if (material) {
+           material.wireframe = displayMode === 'wireframe';
+           material.needsUpdate = true;
+         }
+       });
+     }
+   });
+   ```
+
+### Best Practices
+
+1. **Resource Management**
+   - Always clean up models when unmounting
+   - Dispose of materials and textures properly
+   - Use proper error boundaries
+
+2. **Performance**
+   - Implement proper model centering
+   - Maintain appropriate camera distances
+   - Use efficient material updates
+
+3. **User Experience**
+   - Provide loading indicators
+   - Handle errors gracefully
+   - Maintain consistent view behaviors
+
+4. **Code Organization**
+   - Keep model loading logic centralized
+   - Maintain clear separation between view modes
+   - Use proper TypeScript types
+
+Remember to follow these guidelines when making changes to ensure consistent behavior across all view modes and proper resource management.

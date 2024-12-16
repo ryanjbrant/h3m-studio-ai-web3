@@ -11,11 +11,11 @@ import * as THREE from 'three';
 import { SceneObject } from './SceneObject';
 import { SceneControls } from './SceneControls';
 import { TransformMode } from './types';
-import { Layout } from 'lucide-react';
 
 interface SceneBuilderProps {
   initialModelUrl?: string;
   isMultiView?: boolean;
+  displayMode?: 'wireframe' | 'shaded';
 }
 
 export interface SceneObjectData {
@@ -65,6 +65,7 @@ const SceneContext = createContext<{
   selectedObjectId: string | null;
   transformMode: TransformMode;
   lightIntensity: number;
+  displayMode?: 'wireframe' | 'shaded';
   onObjectSelect: (id: string) => void;
   onObjectUpdate: (id: string, updates: Partial<SceneObjectData>) => void;
 } | null>(null);
@@ -79,38 +80,40 @@ const useSceneContext = () => {
 // Shared scene content component
 const SharedSceneContent = () => {
   const { objects, selectedObjectId, transformMode, lightIntensity, onObjectSelect, onObjectUpdate } = useSceneContext();
-  const { camera, scene } = useThree();
+  const { scene } = useThree();
+
+  // Update materials when displayMode changes
+  const displayMode = useContext(SceneContext)?.displayMode;
   
   useEffect(() => {
-    console.log('Scene state:', {
-      cameraPosition: camera.position,
-      objectsInScene: scene.children.length,
-      sceneObjects: objects,
-      viewMatrix: camera.matrix
-    });
-  }, [camera, scene, objects]);
+    if (displayMode) {
+      scene.traverse((child: THREE.Object3D) => {
+        if (child instanceof THREE.Mesh && child.material) {
+          const materials = Array.isArray(child.material) ? child.material : [child.material];
+          materials.forEach(material => {
+            if (material) {
+              material.wireframe = displayMode === 'wireframe';
+              material.needsUpdate = true;
+            }
+          });
+        }
+      });
+    }
+  }, [displayMode, scene]);
 
   return (
     <>
       <SceneMonitor />
-      {objects.map(object => {
-        console.log('Rendering object in view:', {
-          objectId: object.id,
-          position: object.position,
-          cameraPosition: camera.position,
-          viewLabel: camera.name
-        });
-        return (
-          <SceneObject
-            key={object.id}
-            object={object}
-            isSelected={object.id === selectedObjectId}
-            transformMode={transformMode}
-            onClick={() => onObjectSelect(object.id)}
-            onUpdate={(updates) => onObjectUpdate(object.id, updates)}
-          />
-        );
-      })}
+      {objects.map(object => (
+        <SceneObject
+          key={object.id}
+          object={object}
+          isSelected={object.id === selectedObjectId}
+          transformMode={transformMode}
+          onClick={() => onObjectSelect(object.id)}
+          onUpdate={(updates) => onObjectUpdate(object.id, updates)}
+        />
+      ))}
 
       {lightIntensity > 0 && (
         <>
@@ -151,13 +154,11 @@ const ViewportCanvas = ({
           toneMapping: THREE.ACESFilmicToneMapping,
           toneMappingExposure: 1.2
         }}
-        onCreated={({ camera: viewCamera }) => {
-          viewCamera.name = label;
-          console.log('Canvas created:', { 
-            label, 
-            cameraType: camera.orthographic ? 'orthographic' : 'perspective',
-            position: camera.position
-          });
+        camera={{
+          ...camera,
+          near: 0.1,
+          far: 1000,
+          fov: 45
         }}
       >
         <SharedSceneContent />
@@ -166,7 +167,7 @@ const ViewportCanvas = ({
             makeDefault 
             position={camera.position}
             rotation={camera.rotation}
-            zoom={camera.zoom || 50}
+            zoom={camera.zoom || 100}
             name={label}
           />
         ) : (
@@ -180,21 +181,23 @@ const ViewportCanvas = ({
         )}
         {controls && (
           <OrbitControls
+            makeDefault
             enableDamping
             dampingFactor={0.05}
-            minDistance={2}
-            maxDistance={20}
+            minDistance={1}
+            maxDistance={10}
             minPolarAngle={0}
             maxPolarAngle={Math.PI / 2}
             enableRotate={!camera.orthographic}
             enableZoom={true}
+            target={[0, 0, 0]}
           />
         )}
       </Canvas>
     </div>
   );
 };
-export function SceneBuilder({ initialModelUrl, isMultiView = false }: SceneBuilderProps) {
+export function SceneBuilder({ initialModelUrl, isMultiView = false, displayMode = 'shaded' }: SceneBuilderProps) {
   const [objects, setObjects] = useState<SceneObjectData[]>(() => {
     const initial = initialModelUrl ? [{
       id: 'initial-model',
@@ -264,6 +267,7 @@ export function SceneBuilder({ initialModelUrl, isMultiView = false }: SceneBuil
     selectedObjectId,
     transformMode,
     lightIntensity,
+    displayMode,
     onObjectSelect: setSelectedObjectId,
     onObjectUpdate: handleObjectUpdate
   };
@@ -289,36 +293,39 @@ export function SceneBuilder({ initialModelUrl, isMultiView = false }: SceneBuil
           <div className="w-full h-full grid grid-cols-2 grid-rows-2 gap-1">
             <ViewportCanvas
               label="Perspective"
-              camera={{ position: [5, 5, 5] }}
+              camera={{ position: [3, 3, 3] }}
             />
             <ViewportCanvas
               label="Top"
               camera={{ 
-                position: [0, 10, 0],
+                position: [0, 5, 0],
                 rotation: [-Math.PI / 2, 0, 0],
-                orthographic: true
+                orthographic: true,
+                zoom: 100
               }}
             />
             <ViewportCanvas
               label="Front"
               camera={{ 
-                position: [0, 0, 10],
-                orthographic: true
+                position: [0, 0, 5],
+                orthographic: true,
+                zoom: 100
               }}
             />
             <ViewportCanvas
               label="Right"
               camera={{ 
-                position: [10, 0, 0],
+                position: [5, 0, 0],
                 rotation: [0, -Math.PI / 2, 0],
-                orthographic: true
+                orthographic: true,
+                zoom: 100
               }}
             />
           </div>
         ) : (
           <ViewportCanvas
             label="Perspective"
-            camera={{ position: [5, 5, 5] }}
+            camera={{ position: [3, 3, 3] }}
           />
         )}
       </SceneContext.Provider>

@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { useEffect, Suspense, useState, useMemo } from 'react';
-import { Canvas, useThree } from '@react-three/fiber';
+import { Canvas } from '@react-three/fiber';
 import { OrbitControls, useGLTF, Html } from '@react-three/drei';
 import { ErrorBoundary } from '../ErrorBoundary';
 import { SceneBuilder } from '../scene-builder/SceneBuilder';
@@ -18,6 +18,9 @@ interface LoadedModelProps {
   displayMode?: 'wireframe' | 'shaded';
   lightIntensity?: number;
   currentView?: 'model' | 'scene';
+  onModelUploaded?: (modelUrl: string) => void;
+  onTextureGenerated?: (maps: any) => void;
+  modelType?: string;
 }
 
 interface ModelProps {
@@ -27,28 +30,39 @@ interface ModelProps {
 
 // Model component for rendering 3D models
 function Model({ url, displayMode }: ModelProps) {
-  const { scene } = useThree();
-  
+  const model = useGLTF(url);
+
+  useEffect(() => {
+    // Update material mode when displayMode changes
+    model.scene.traverse((child: THREE.Object3D) => {
+      if (child instanceof THREE.Mesh && child.material) {
+        const materials = Array.isArray(child.material) ? child.material : [child.material];
+        materials.forEach(material => {
+          if (material) {
+            material.wireframe = displayMode === 'wireframe';
+            material.needsUpdate = true;
+          }
+        });
+      }
+    });
+  }, [displayMode, model.scene]);
+
   return (
     <primitive 
-      object={useGLTF(url).scene} 
+      object={model.scene} 
       position={[0, 0, 0]}
       scale={1}
-      onUpdate={(self) => {
+      onUpdate={(self: THREE.Object3D) => {
         // Center the model
         const box = new THREE.Box3().setFromObject(self);
         const center = box.getCenter(new THREE.Vector3());
         self.position.sub(center);
         
-        // Apply basic material
+        // Enable shadows
         self.traverse((child: THREE.Object3D) => {
           if (child instanceof THREE.Mesh) {
-            child.material = new THREE.MeshStandardMaterial({
-              color: 0xffffff,
-              metalness: 0.5,
-              roughness: 0.5,
-              wireframe: displayMode === 'wireframe'
-            });
+            child.castShadow = true;
+            child.receiveShadow = true;
           }
         });
       }}
@@ -80,11 +94,16 @@ const ViewportCanvas = ({
       <div className="absolute top-2 left-2 text-xs text-white bg-black/50 px-2 py-1 rounded z-10">{label}</div>
       <Canvas
         shadows
-        camera={camera}
         gl={{ 
           antialias: true,
           toneMapping: THREE.ACESFilmicToneMapping,
           toneMappingExposure: 1.2
+        }}
+        camera={{
+          ...camera,
+          near: 0.1,
+          far: 1000,
+          fov: 45
         }}
       >
         <ErrorBoundary
@@ -106,7 +125,20 @@ const ViewportCanvas = ({
           }>
             <ambientLight intensity={0.5} />
             <directionalLight position={[5, 5, 5]} intensity={1} />
-            {controls && <OrbitControls makeDefault />}
+            {controls && (
+              <OrbitControls
+                makeDefault
+                enableDamping
+                dampingFactor={0.05}
+                minDistance={1}
+                maxDistance={10}
+                minPolarAngle={0}
+                maxPolarAngle={Math.PI / 2}
+                enableRotate={!camera.orthographic}
+                enableZoom={true}
+                target={[0, 0, 0]}
+              />
+            )}
             {modelUrl && <Model url={modelUrl} displayMode={displayMode} />}
           </Suspense>
         </ErrorBoundary>
@@ -129,39 +161,39 @@ function ModelViewer({
     if (!isMultiView) {
       return [{
         label: "Perspective",
-        camera: { position: [5, 5, 5] as [number, number, number] }
+        camera: { position: [3, 3, 3] as [number, number, number] }
       }];
     }
 
     return [
       {
         label: "Perspective",
-        camera: { position: [5, 5, 5] as [number, number, number] }
+        camera: { position: [3, 3, 3] as [number, number, number] }
       },
       {
         label: "Top",
         camera: { 
-          position: [0, 10, 0] as [number, number, number],
+          position: [0, 5, 0] as [number, number, number],
           rotation: [-Math.PI / 2, 0, 0] as [number, number, number],
           orthographic: true,
-          zoom: 50
+          zoom: 100
         }
       },
       {
         label: "Front",
         camera: { 
-          position: [0, 0, 10] as [number, number, number],
+          position: [0, 0, 5] as [number, number, number],
           orthographic: true,
-          zoom: 50
+          zoom: 100
         }
       },
       {
         label: "Right",
         camera: { 
-          position: [10, 0, 0] as [number, number, number],
+          position: [5, 0, 0] as [number, number, number],
           rotation: [0, -Math.PI / 2, 0] as [number, number, number],
           orthographic: true,
-          zoom: 50
+          zoom: 100
         }
       }
     ];
@@ -188,7 +220,6 @@ function ModelViewer({
 export function LoadedModel({
   modelUrl,
   displayMode = 'shaded',
-  lightIntensity = 1,
   currentView = 'model'
 }: LoadedModelProps) {
   const [viewMode, setViewMode] = useState<'model' | 'scene'>(currentView);
@@ -207,11 +238,16 @@ export function LoadedModel({
     };
   }, [modelUrl]);
 
+  // Update material mode when displayMode prop changes
+  useEffect(() => {
+    setMaterialMode(displayMode);
+  }, [displayMode]);
+
   return (
     <div className="flex flex-1 h-full relative">
       <div className="flex-1 relative">
         {/* Unified Toolbar */}
-        <div className="absolute top-0 left-0 right-0 z-10 p-2 bg-black/50 backdrop-blur-sm">
+        <div className="absolute top-0 left-0 right-0 z-50 p-2 bg-black/50 backdrop-blur-sm">
           <div className="max-w-4xl mx-auto flex items-center justify-between gap-4">
             {/* View Controls Group */}
             <div className="flex items-center gap-2 px-2 py-1 bg-black/20 rounded-lg">
@@ -298,7 +334,11 @@ export function LoadedModel({
             />
           ) : (
             <div className="w-full h-full">
-              <SceneBuilder initialModelUrl={modelUrl} isMultiView={isMultiView} />
+              <SceneBuilder 
+                initialModelUrl={modelUrl} 
+                isMultiView={isMultiView}
+                displayMode={materialMode}
+              />
             </div>
           )}
         </ErrorBoundary>
