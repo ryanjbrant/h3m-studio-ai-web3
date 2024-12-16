@@ -8,6 +8,7 @@ import { createImageTo3DTask, getTaskStatus } from '../../services/meshyApi';
 import { saveGeneration } from '../../services/storage';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
+import { Controls } from '../Controls';
 
 interface GenerationSettings {
   prompt: string;
@@ -168,7 +169,7 @@ export function ModelGenerationPanel({
     }
   };
 
-  return (
+  const generationContent = (
     <div className="h-full flex flex-col">
       <div className="flex border-b border-[#242429]">
         <button
@@ -316,32 +317,26 @@ export function ModelGenerationPanel({
               onClick={handleImageGenerate}
               disabled={!image || isImageGenerating}
               className={cn(
-                'w-full px-4 py-2 bg-blue-500 text-white rounded-md font-medium disabled:opacity-50 disabled:cursor-not-allowed hover:bg-blue-600 transition-colors'
+                'w-full py-2 px-4 rounded-lg font-medium transition-colors',
+                image && !isImageGenerating
+                  ? 'bg-blue-500 hover:bg-blue-600 text-white'
+                  : 'bg-[#242429] text-gray-400 cursor-not-allowed'
               )}
             >
               {isImageGenerating ? 'Generating...' : 'Generate 3D Model'}
             </button>
-
-            {selectedTask?.status === 'SUCCEEDED' && (
-              <div className="space-y-2">
-                <button
-                  onClick={handleViewModel}
-                  className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-md font-medium hover:bg-blue-600 transition-colors"
-                >
-                  View Model
-                </button>
-                <button
-                  onClick={handleSendToScene}
-                  className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-[#242429] text-white rounded-md font-medium hover:bg-[#2a2a2f] transition-colors"
-                >
-                  <Send className="w-4 h-4" />
-                  Send to Scene
-                </button>
-              </div>
-            )}
           </div>
         )}
       </div>
     </div>
+  );
+
+  return (
+    <Controls
+      maps={null}
+      onGenerate={onGenerate}
+      isGenerating={isGenerating}
+      createContent={generationContent}
+    />
   );
 } 

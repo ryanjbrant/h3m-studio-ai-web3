@@ -1,78 +1,45 @@
 import { create } from 'zustand';
-import { TextureSettings, PreviewSettings } from '../types';
+import { TextureSettings } from '@/types/texture';
 
 interface TextureState {
   settings: TextureSettings;
-  previewSettings: PreviewSettings;
-  updateSettings: <K extends keyof TextureSettings>(
-    mapType: K,
-    settings: Partial<TextureSettings[K]>
-  ) => void;
-  updatePreviewSettings: (settings: Partial<PreviewSettings>) => void;
+  setSettings: (settings: Partial<TextureSettings>) => void;
   resetSettings: () => void;
 }
 
 const defaultSettings: TextureSettings = {
   normal: {
-    strength: 100,
+    strength: 50,
     blur: 0,
-    sharp: 0,
-    detailLevel: 5,
-    filterType: 'sobel',
     invertRed: false,
-    invertGreen: false,
-    height: 50,
+    invertGreen: false
   },
   displacement: {
-    contrast: 0,
-    blur: 0.2,
-    sharp: 0,
-    invert: false,
-  },
-  ao: {
-    strength: 100,
-    mean: 50,
-    range: 50,
-    blur: 0,
-    sharp: 0,
-    invert: false,
+    contrast: 50,
+    blur: 10,
+    invert: false
   },
   specular: {
-    strength: 100,
-    mean: 50,
-    range: 50,
-    falloff: 50,
+    strength: 50,
+    falloff: 25
   },
-  preset: null,
-};
-
-const defaultPreviewSettings: PreviewSettings = {
-  model: 'sphere',
-  rotation: true,
-  maps: {
-    diffuse: true,
-    displacement: true,
-    normal: true,
-    ao: true,
-    specular: true,
-  },
-  environment: false,
+  ao: {
+    strength: 50,
+    range: 16,
+    mean: 8,
+    blur: 0,
+    invert: false
+  }
 };
 
 export const useTextureStore = create<TextureState>((set) => ({
   settings: defaultSettings,
-  previewSettings: defaultPreviewSettings,
-  updateSettings: (mapType, newSettings) =>
+  setSettings: (newSettings) =>
     set((state) => ({
       settings: {
         ...state.settings,
-        [mapType]: { ...state.settings[mapType], ...newSettings },
-      },
+        ...newSettings
+      }
     })),
-  updatePreviewSettings: (newSettings) =>
-    set((state) => ({
-      previewSettings: { ...state.previewSettings, ...newSettings },
-    })),
-  resetSettings: () =>
-    set({ settings: defaultSettings, previewSettings: defaultPreviewSettings }),
+  resetSettings: () => set({ settings: defaultSettings })
 }));

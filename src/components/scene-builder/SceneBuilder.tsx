@@ -15,6 +15,7 @@ import { Layout } from 'lucide-react';
 
 interface SceneBuilderProps {
   initialModelUrl?: string;
+  isMultiView?: boolean;
 }
 
 export interface SceneObjectData {
@@ -193,7 +194,7 @@ const ViewportCanvas = ({
     </div>
   );
 };
-export function SceneBuilder({ initialModelUrl }: SceneBuilderProps) {
+export function SceneBuilder({ initialModelUrl, isMultiView = false }: SceneBuilderProps) {
   const [objects, setObjects] = useState<SceneObjectData[]>(() => {
     const initial = initialModelUrl ? [{
       id: 'initial-model',
@@ -210,7 +211,6 @@ export function SceneBuilder({ initialModelUrl }: SceneBuilderProps) {
   const [selectedObjectId, setSelectedObjectId] = useState<string | null>(null);
   const [transformMode, setTransformMode] = useState<TransformMode>('translate');
   const [lightIntensity, setLightIntensity] = useState(1);
-  const [isMultiView, setIsMultiView] = useState(false);
 
   const selectedObject = objects.find(obj => obj.id === selectedObjectId);
   
@@ -284,14 +284,6 @@ export function SceneBuilder({ initialModelUrl }: SceneBuilderProps) {
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
     >
-      <button
-        onClick={() => setIsMultiView(prev => !prev)}
-        className="absolute top-4 right-4 z-10 p-2 bg-black/80 rounded-lg text-white hover:bg-black/60 transition-colors"
-        title={isMultiView ? "Single View" : "Multi View"}
-      >
-        <Layout className="w-5 h-5" />
-      </button>
-
       <SceneContext.Provider value={sceneContextValue}>
         {isMultiView ? (
           <div className="w-full h-full grid grid-cols-2 grid-rows-2 gap-1">

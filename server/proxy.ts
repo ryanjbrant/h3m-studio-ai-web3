@@ -222,7 +222,7 @@ app.get('/api/model', async (req, res) => {
 
     console.log('Proxying model request for:', url);
 
-    // Set CORS headers for the preflight request
+    // Set CORS headers
     res.set({
       'Access-Control-Allow-Origin': '*',
       'Access-Control-Allow-Methods': 'GET, OPTIONS',
@@ -233,6 +233,12 @@ app.get('/api/model', async (req, res) => {
     // Handle preflight request
     if (req.method === 'OPTIONS') {
       return res.status(204).send();
+    }
+
+    // Fetch the model
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`Failed to fetch model: ${response.statusText}`);
     }
 
     // Determine content type based on file extension
@@ -246,79 +252,16 @@ app.get('/api/model', async (req, res) => {
       'usdz': 'model/vnd.usdz+zip',
     };
 
-    console.log('Fetching model with extension:', fileExtension);
+    // Set appropriate content type
+    const contentType = contentTypeMap[fileExtension || 'glb'] || 'application/octet-stream';
+    res.set('Content-Type', contentType);
 
-    const response = await fetch(url, {
-      headers: {
-        'Authorization': `Bearer ${process.env.VITE_MESHY_API_KEY}`,
-        'Accept': contentTypeMap[fileExtension || ''] || '*/*',
-        'Range': req.headers.range || '',
-      },
-    });
-
-    console.log('Model fetch response:', {
-      status: response.status,
-      statusText: response.statusText,
-      contentType: response.headers.get('content-type'),
-      contentLength: response.headers.get('content-length'),
-      fileExtension
-    });
-
-    // Special handling for 403 errors on MTL files - return empty MTL
-    if (response.status === 403 && fileExtension === 'mtl') {
-      res.setHeader('Content-Type', 'text/plain');
-      return res.send('# Empty MTL file\n');
-    }
-
-    if (!response.ok) {
-      throw new Error(`Failed to fetch model: ${response.statusText} (${response.status})`);
-    }
-
-    // Forward relevant headers from the original response
-    const headers = [
-      'content-type',
-      'content-length',
-      'content-range',
-      'accept-ranges',
-      'cache-control',
-      'expires',
-      'last-modified',
-      'etag'
-    ];
-
-    headers.forEach(header => {
-      const value = response.headers.get(header);
-      if (value) {
-        res.setHeader(header, value);
-      }
-    });
-
-    // Set content type if not provided by the response
-    if (!response.headers.get('content-type') && fileExtension) {
-      const contentType = contentTypeMap[fileExtension];
-      if (contentType) {
-        res.setHeader('Content-Type', contentType);
-      }
-    }
-
-    // For GLB files, ensure proper content type and transfer
-    if (fileExtension === 'glb') {
-      res.setHeader('Content-Type', 'model/gltf-binary');
-      
-      // Get the response as an array buffer
-      const buffer = await response.arrayBuffer();
-      console.log('GLB file size:', buffer.byteLength);
-      
-      // Send the buffer directly
-      return res.send(Buffer.from(buffer));
-    }
-
-    // Stream other file types
+    // Stream the response
     response.body?.pipe(res);
   } catch (error) {
     console.error('Error proxying model:', error);
     res.status(500).json({ 
-      error: error instanceof Error ? error.message : 'Failed to proxy model request' 
+      error: error instanceof Error ? error.message : 'Failed to proxy model'
     });
   }
 });

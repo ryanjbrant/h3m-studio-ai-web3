@@ -522,3 +522,136 @@ The Scene Builder is a powerful 3D scene editor that allows users to manipulate 
 - Large model files may cause performance issues
 
 Remember to follow these guidelines when making changes to the 3D components and always test thoroughly before deployment.
+
+## Model Viewing System
+
+The application features a robust 3D model viewing system with multiple viewing modes and capabilities:
+
+### Core Components
+
+1. **LoadedModel Component** (`src/components/text-to-3d/LoadedModel.tsx`)
+   - Main container for model viewing functionality
+   - Handles model loading, viewing modes, and material display
+   - Manages the unified toolbar interface
+
+2. **ViewportCanvas Component**
+   - Renders individual 3D viewports
+   - Handles camera setup and controls
+   - Provides loading states and error boundaries
+
+3. **ModelViewer Component**
+   - Manages multiple viewport configurations
+   - Handles 4-up view layout
+   - Controls camera positions and orientations
+
+### Viewing Modes
+
+1. **Single View Mode**
+   - Default perspective view
+   - Full-screen single viewport
+   - Interactive orbit controls
+   - Camera Position: [5, 5, 5]
+
+2. **4-Up View Mode**
+   - Four synchronized viewports:
+     - Perspective (Position: [5, 5, 5])
+     - Top (Position: [0, 10, 0], Orthographic)
+     - Front (Position: [0, 0, 10], Orthographic)
+     - Right (Position: [10, 0, 0], Orthographic)
+   - Each view has independent camera controls
+
+3. **Scene Mode**
+   - Full scene editing capabilities
+   - Grid helper for orientation
+   - Support for multiple models
+   - Transform controls for object manipulation
+
+### Material Display Options
+
+1. **Shaded Mode**
+   - Default material display
+   - MeshStandardMaterial with:
+     - Metalness: 0.5
+     - Roughness: 0.5
+     - Default white color
+
+2. **Wireframe Mode**
+   - Toggle for wireframe display
+   - Maintains material properties
+   - Useful for geometry inspection
+
+### Key Features
+
+1. **Model Loading**
+   - Automatic model centering
+   - Proper scale management
+   - Memory cleanup on unmount
+   - Preloading for performance
+
+2. **Error Handling**
+   - Comprehensive error boundaries
+   - Loading state management
+   - Graceful fallbacks
+
+3. **Performance Optimizations**
+   - Efficient material updates
+   - Memory management
+   - Context preservation
+   - Proper cleanup
+
+### Usage Guidelines
+
+1. **Model Loading**
+   ```typescript
+   <LoadedModel
+     modelUrl="path/to/model.glb"
+     displayMode="shaded"
+     currentView="model"
+   />
+   ```
+
+2. **View Switching**
+   - Use toolbar buttons to switch between:
+     - Model/Scene views
+     - Single/4-up layouts
+     - Material display modes
+
+3. **Best Practices**
+   - Ensure models are in GLB format
+   - Use proper lighting setup
+   - Clean up resources when unmounting
+   - Handle WebGL context properly
+
+### Technical Considerations
+
+1. **WebGL Context**
+   - Single THREE.js instance
+   - Proper context management
+   - Memory cleanup
+
+2. **Camera Setup**
+   - Perspective camera for main view
+   - Orthographic cameras for side views
+   - Proper aspect ratio handling
+
+3. **Resource Management**
+   - Model preloading/unloading
+   - Material disposal
+   - Memory cleanup
+
+### Troubleshooting
+
+1. **Model Not Appearing**
+   - Verify model URL is correct
+   - Check model format (GLB preferred)
+   - Ensure proper cleanup on unmount
+
+2. **Performance Issues**
+   - Use proper material settings
+   - Manage memory appropriately
+   - Clean up unused resources
+
+3. **View Problems**
+   - Verify camera positions
+   - Check orthographic settings
+   - Ensure proper aspect ratios
