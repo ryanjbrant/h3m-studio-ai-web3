@@ -4,117 +4,210 @@ import fetch from 'node-fetch';
 import * as dotenv from 'dotenv';
 import { fileURLToPath } from 'url';
 import { dirname, resolve } from 'path';
+import rateLimit from 'express-rate-limit';
 
 interface MeshyApiResponse {
   message?: string;
+  error?: string;
+  result?: any;
   taskId?: string;
   status?: string;
-  error?: string;
-  result?: string;
+  model_urls?: {
+    glb?: string;
+    fbx?: string;
+    usdz?: string;
+  };
 }
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 dotenv.config({ path: resolve(__dirname, '../.env') });
 
+// IMPORTANT: Required configuration for proxy server
 const app = express();
 const port = process.env.PORT || 3001;
-const MESHY_API_URL = 'https://api.meshy.ai/v2';
+const MESHY_API_BASE_URL = 'https://api.meshy.ai';
+const MESHY_API_V1_URL = `${MESHY_API_BASE_URL}/v1`;
+const MESHY_API_V2_URL = `${MESHY_API_BASE_URL}/v2`;
 
-// Configure CORS to only allow requests from your frontend
+// Rate limiting setup - 20 requests per second as per API rules
+const limiter = rateLimit({
+  windowMs: 1000, // 1 second
+  max: 20, // limit each IP to 20 requests per second
+  message: { message: 'Too many requests, please try again later' }
+});
+
+// Apply rate limiting to all routes
+app.use(limiter);
+
+// IMPORTANT: Required middleware for text-to-3D functionality
 app.use(cors({
-  origin: ['http://localhost:5173', 'http://127.0.0.1:5173'],
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'Content-Length', 'Accept', 'Range'],
-  exposedHeaders: ['Content-Type', 'Content-Length', 'Content-Range', 'Accept-Ranges'],
-  credentials: true,
-  maxAge: 86400 // 24 hours
+  origin: ['http://localhost:5173', 'https://your-production-domain.com'],
+  methods: ['GET', 'POST'],
+  credentials: true
 }));
 
 // Handle preflight requests
 app.options('*', cors());
 
+// Increase payload size limit for requests
 app.use(express.json({ limit: '50mb' }));
 
-// Text to 3D endpoint
-app.post('/api/text2mesh', async (req, res) => {
+// Track ongoing requests to prevent duplicates
+const ongoingRequests = new Map<string, Promise<any>>();
+
+// IMPORTANT: Core API request handler with retry logic
+async function makeApiRequest(endpoint: string, requestData: any = null, method: 'GET' | 'POST' = 'POST', retries = 3) {
+  const requestId = `${endpoint}-${Date.now()}`;
+  
+  // Check if this exact request is already in progress
+  if (ongoingRequests.has(requestId)) {
+    return ongoingRequests.get(requestId);
+  }
+
+  const request = (async () => {
+    for (let attempt = 1; attempt <= retries; attempt++) {
+      try {
+        const options: any = {
+          method,
+          headers: {
+            'Authorization': `Bearer ${process.env.VITE_MESHY_API_KEY}`,
+            'Accept': 'application/json',
+          }
+        };
+
+        if (method === 'POST') {
+          options.headers['Content-Type'] = 'application/json';
+          options.body = JSON.stringify(requestData);
+        }
+
+        // Use v1 for image-to-3d, v2 for text-to-3d
+        const baseUrl = endpoint.startsWith('image-to-3d') ? MESHY_API_V1_URL : MESHY_API_V2_URL;
+        const response = await fetch(`${baseUrl}/${endpoint}`, options);
+
+        const data = await response.json() as MeshyApiResponse;
+        console.log(`${endpoint} response:`, {
+          status: response.status,
+          data: { ...data, result: data.result ? '[TRUNCATED]' : undefined }
+        });
+
+        if (!response.ok) {
+          switch (response.status) {
+            case 400:
+              throw new Error(data.message || 'Bad Request');
+            case 401:
+              throw new Error('Invalid API key');
+            case 402:
+              throw new Error('Insufficient credits');
+            case 404:
+              throw new Error('Resource not found');
+            case 429:
+              if (attempt < retries) {
+                // Rate limit hit, wait and retry with exponential backoff
+                await new Promise(resolve => setTimeout(resolve, Math.pow(2, attempt) * 1000));
+                continue;
+              }
+              throw new Error('Too many requests');
+            default:
+              throw new Error(data.message || `API request failed: ${response.statusText}`);
+          }
+        }
+
+        return data;
+      } catch (error) {
+        if (attempt === retries) {
+          throw error;
+        }
+        // Wait before retrying
+        await new Promise(resolve => setTimeout(resolve, Math.pow(2, attempt) * 1000));
+      }
+    }
+  })();
+
+  ongoingRequests.set(requestId, request);
   try {
-    const response = await fetch(`${MESHY_API_URL}/text-to-3d`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${process.env.VITE_MESHY_API_KEY}`,
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-      },
-      body: JSON.stringify({
-        ...req.body,
-        mode: 'preview'
-      }),
+    return await request;
+  } finally {
+    ongoingRequests.delete(requestId);
+  }
+}
+
+// IMPORTANT: Text to 3D generation endpoint
+app.post('/api/text-to-3d', async (req, res) => {
+  try {
+    console.log('Received text-to-3D request:', {
+      ...req.body,
+      prompt: req.body.prompt
     });
 
-    const data = await response.json() as MeshyApiResponse;
-    if (!response.ok) {
-      throw new Error(data.message || 'Failed to create text2mesh task');
+    if (!req.body.prompt) {
+      return res.status(400).json({ 
+        message: 'Prompt is required'
+      });
     }
 
-    res.json(data);
+    const data = await makeApiRequest('text-to-3d', {
+      ...req.body,
+      format: 'glb'  // Always use GLB format
+    });
+
+    // Return 202 for accepted tasks as per API rules
+    res.status(202).json(data);
   } catch (error) {
-    console.error('Text2Mesh error:', error);
+    console.error('Text-to-3D error:', error);
+    // Map error messages to appropriate status codes
+    if (error instanceof Error) {
+      switch (error.message) {
+        case 'Bad Request': return res.status(400).json({ message: error.message });
+        case 'Invalid API key': return res.status(401).json({ message: error.message });
+        case 'Insufficient credits': return res.status(402).json({ message: error.message });
+        case 'Resource not found': return res.status(404).json({ message: error.message });
+        case 'Too many requests': return res.status(429).json({ message: error.message });
+      }
+    }
     res.status(500).json({ 
-      error: error instanceof Error ? error.message : 'Failed to create text2mesh task' 
+      message: error instanceof Error ? error.message : 'Internal server error'
     });
   }
 });
 
-// Get task status endpoint
-app.get('/api/text2mesh/:taskId', async (req, res) => {
-  try {
-    const response = await fetch(`${MESHY_API_URL}/text-to-3d/${req.params.taskId}`, {
-      headers: {
-        'Authorization': `Bearer ${process.env.VITE_MESHY_API_KEY}`,
-        'Accept': 'application/json',
-      },
-    });
-
-    const data = await response.json() as MeshyApiResponse;
-    if (!response.ok) {
-      throw new Error(data.message || 'Failed to get task status');
-    }
-
-    res.json(data);
-  } catch (error) {
-    console.error('Task status error:', error);
-    res.status(500).json({ 
-      error: error instanceof Error ? error.message : 'Failed to get task status' 
-    });
-  }
-});
-
-// Image to 3D endpoint
+// CRITICAL: Image-to-3D Proxy Endpoint
+// WARNING: This implementation MUST be preserved exactly as is
+// The endpoint MUST forward the complete data URI without modification
 app.post('/api/image-to-3d', async (req, res) => {
   try {
-    const response = await fetch(`${MESHY_API_URL}/image-to-3d`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${process.env.VITE_MESHY_API_KEY}`,
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-      },
-      body: JSON.stringify({
-        ...req.body,
-        mode: 'preview'
-      }),
+    console.log('Received image-to-3D request:', {
+      ...req.body,
+      image_url: req.body.image_url ? '[DATA_URI]' : undefined
     });
 
-    const data = await response.json() as MeshyApiResponse;
-    if (!response.ok) {
-      throw new Error(data.message || 'Failed to create image-to-3D task');
+    // CRITICAL: Validate image_url is present and properly formatted
+    if (!req.body.image_url) {
+      return res.status(400).json({ 
+        message: 'Image URL is required'
+      });
     }
 
-    res.json(data);
+    // CRITICAL: Forward request to Meshy API with exact parameters
+    const data = await makeApiRequest('image-to-3d', {
+      ...req.body,
+      format: 'glb'  // MUST use GLB format for web compatibility
+    }, 'POST');
+
+    // CRITICAL: Return 202 status for accepted tasks as per API specification
+    res.status(202).json(data);
   } catch (error) {
     console.error('Image-to-3D error:', error);
+    if (error instanceof Error) {
+      switch (error.message) {
+        case 'Bad Request': return res.status(400).json({ message: error.message });
+        case 'Invalid API key': return res.status(401).json({ message: error.message });
+        case 'Insufficient credits': return res.status(402).json({ message: error.message });
+        case 'Resource not found': return res.status(404).json({ message: error.message });
+        case 'Too many requests': return res.status(429).json({ message: error.message });
+      }
+    }
     res.status(500).json({ 
-      error: error instanceof Error ? error.message : 'Failed to create image-to-3D task' 
+      message: error instanceof Error ? error.message : 'Internal server error'
     });
   }
 });
@@ -129,7 +222,7 @@ app.get('/api/model', async (req, res) => {
 
     console.log('Proxying model request for:', url);
 
-    // Set CORS headers for the preflight request
+    // Set CORS headers
     res.set({
       'Access-Control-Allow-Origin': '*',
       'Access-Control-Allow-Methods': 'GET, OPTIONS',
@@ -140,6 +233,12 @@ app.get('/api/model', async (req, res) => {
     // Handle preflight request
     if (req.method === 'OPTIONS') {
       return res.status(204).send();
+    }
+
+    // Fetch the model
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`Failed to fetch model: ${response.statusText}`);
     }
 
     // Determine content type based on file extension
@@ -153,79 +252,38 @@ app.get('/api/model', async (req, res) => {
       'usdz': 'model/vnd.usdz+zip',
     };
 
-    console.log('Fetching model with extension:', fileExtension);
+    // Set appropriate content type
+    const contentType = contentTypeMap[fileExtension || 'glb'] || 'application/octet-stream';
+    res.set('Content-Type', contentType);
 
-    const response = await fetch(url, {
-      headers: {
-        'Authorization': `Bearer ${process.env.VITE_MESHY_API_KEY}`,
-        'Accept': contentTypeMap[fileExtension || ''] || '*/*',
-        'Range': req.headers.range || '',
-      },
-    });
-
-    console.log('Model fetch response:', {
-      status: response.status,
-      statusText: response.statusText,
-      contentType: response.headers.get('content-type'),
-      contentLength: response.headers.get('content-length'),
-      fileExtension
-    });
-
-    // Special handling for 403 errors on MTL files - return empty MTL
-    if (response.status === 403 && fileExtension === 'mtl') {
-      res.setHeader('Content-Type', 'text/plain');
-      return res.send('# Empty MTL file\n');
-    }
-
-    if (!response.ok) {
-      throw new Error(`Failed to fetch model: ${response.statusText} (${response.status})`);
-    }
-
-    // Forward relevant headers from the original response
-    const headers = [
-      'content-type',
-      'content-length',
-      'content-range',
-      'accept-ranges',
-      'cache-control',
-      'expires',
-      'last-modified',
-      'etag'
-    ];
-
-    headers.forEach(header => {
-      const value = response.headers.get(header);
-      if (value) {
-        res.setHeader(header, value);
-      }
-    });
-
-    // Set content type if not provided by the response
-    if (!response.headers.get('content-type') && fileExtension) {
-      const contentType = contentTypeMap[fileExtension];
-      if (contentType) {
-        res.setHeader('Content-Type', contentType);
-      }
-    }
-
-    // For GLB files, ensure proper content type and transfer
-    if (fileExtension === 'glb') {
-      res.setHeader('Content-Type', 'model/gltf-binary');
-      
-      // Get the response as an array buffer
-      const buffer = await response.arrayBuffer();
-      console.log('GLB file size:', buffer.byteLength);
-      
-      // Send the buffer directly
-      return res.send(Buffer.from(buffer));
-    }
-
-    // Stream other file types
+    // Stream the response
     response.body?.pipe(res);
   } catch (error) {
     console.error('Error proxying model:', error);
     res.status(500).json({ 
-      error: error instanceof Error ? error.message : 'Failed to proxy model request' 
+      error: error instanceof Error ? error.message : 'Failed to proxy model'
+    });
+  }
+});
+
+// IMPORTANT: Task status checking endpoint
+app.get('/api/task/:taskId', async (req, res) => {
+  try {
+    const { taskId } = req.params;
+    const data = await makeApiRequest(`text-to-3d/${taskId}`, null, 'GET');
+    res.json(data);
+  } catch (error) {
+    console.error('Task status error:', error);
+    if (error instanceof Error) {
+      switch (error.message) {
+        case 'Bad Request': return res.status(400).json({ message: error.message });
+        case 'Invalid API key': return res.status(401).json({ message: error.message });
+        case 'Resource not found': return res.status(404).json({ message: error.message });
+        case 'Too many requests': return res.status(429).json({ message: error.message });
+      }
+    }
+    res.status(500).json({ 
+      message: error instanceof Error ? error.message : 'Internal server error'
     });
   }
 });

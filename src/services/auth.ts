@@ -93,11 +93,6 @@ export const signIn = async (email: string, password: string) => {
       }, { merge: true });
     }
 
-    const userData = userDoc.exists() ? userDoc.data() : { role: 'user' };
-    Object.defineProperty(userCredential.user, 'isAdmin', {
-      get: () => userData.role === 'admin' || email === 'ryanjbrant@gmail.com'
-    });
-
     return userCredential.user;
   } catch (error) {
     console.error('Sign in error:', error);
@@ -117,14 +112,6 @@ export const signOut = async () => {
 export const onAuthChange = (callback: (user: User | null) => void) => {
   return onAuthStateChanged(auth, async (user) => {
     if (user) {
-      const userDoc = await getDoc(doc(db, 'users', user.uid));
-      const userData = userDoc.data();
-      const isAdmin = userData?.role === 'admin' || user.email === 'ryanjbrant@gmail.com';
-      
-      Object.defineProperty(user, 'isAdmin', {
-        get: () => isAdmin
-      });
-
       // Update last visit
       await setDoc(doc(db, 'users', user.uid), {
         lastVisit: new Date()

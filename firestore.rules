@@ -12,6 +12,10 @@ service cloud.firestore {
          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin');
     }
     
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+    
     // Users collection
     match /users/{userId} {
       allow read: if isAuthenticated() && (request.auth.uid == userId || isAdmin());
@@ -20,8 +24,28 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
     
+    // Generations collection
+    match /generations/{generationId} {
+      allow read: if isAuthenticated();
+      allow list: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated() && (
+        resource.data.userId == request.auth.uid || 
+        isAdmin()
+      );
+      allow delete: if isAuthenticated() && (
+        resource.data.userId == request.auth.uid || 
+        isAdmin()
+      );
+    }
+    
     // Admin collection
     match /admin/{document=**} {
+      allow read, write: if isAdmin();
+    }
+
+    // Resources collection
+    match /resources/{resourceId} {
       allow read, write: if isAdmin();
     }
   }

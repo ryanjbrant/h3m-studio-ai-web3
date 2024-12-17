@@ -1,101 +1,108 @@
-import React, { useRef, useEffect, useState } from 'react';
-import { TransformControls } from '@react-three/drei';
-import { Object3D, Group, Mesh, Material } from 'three';
-import { useSceneStore } from '../../store/sceneStore';
-import { SceneObjectType } from '../../types/scene';
-import { loadModel } from '../../utils/modelLoader';
+/**
+ * SceneObject Component
+ * Renders and manages individual 3D models within the scene.
+ * Handles model loading, material setup, and interaction events.
+ */
+
+import { useEffect, useRef } from 'react';
+import { useGLTF, TransformControls } from '@react-three/drei';
+import { useThree } from '@react-three/fiber';
+import * as THREE from 'three';
+import { SceneObjectData } from './SceneBuilder';
+import { TransformMode } from './types';
 
 interface SceneObjectProps {
-  object: SceneObjectType;
-  transformMode: 'translate' | 'rotate' | 'scale' | null;
+  object: SceneObjectData;      // Object data containing position, rotation, scale, and model URL
+  isSelected: boolean;          // Whether this object is currently selected
+  transformMode: TransformMode; // Current transform mode (translate, rotate, scale)
+  onClick: () => void;          // Handler for object selection
+  onUpdate: (updates: Partial<SceneObjectData>) => void;  // Handler for object property updates
 }
 
-export const SceneObject: React.FC<SceneObjectProps> = ({ object, transformMode }) => {
-  const groupRef = useRef<Group>(null);
-  const [model, setModel] = useState<Object3D | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const updateObject = useSceneStore((state) => state.updateObject);
-  const setSelectedObjectId = useSceneStore((state) => state.setSelectedObjectId);
+export function SceneObject({ object, isSelected, transformMode, onClick, onUpdate }: SceneObjectProps) {
+  console.log('SceneObject render:', { object, isSelected, transformMode });
+  
+  const { scene } = useGLTF(object.modelUrl);
+  const groupRef = useRef<THREE.Group>(null);
+  const { invalidate } = useThree();
 
+  // Setup model materials and shadows when scene is loaded
   useEffect(() => {
-    let mounted = true;
-    let objectUrl: string | null = null;
+    if (!scene) {
+      console.log('Scene not loaded yet for object:', object.id);
+      return;
+    }
 
-    const loadModelData = async () => {
-      try {
-        const loadedModel = await loadModel(object.url);
-        if (mounted) {
-          setModel(loadedModel);
-          setError(null);
-        }
-      } catch (err) {
-        if (mounted) {
-          console.error('Failed to load model:', err);
-          setError(err instanceof Error ? err.message : 'Failed to load model');
-        }
-      }
-    };
+    console.log('Processing scene for object:', object.id);
+    scene.traverse((child) => {
+      if (child instanceof THREE.Mesh) {
+        // Enable shadows for all meshes
+        child.castShadow = true;
+        child.receiveShadow = true;
 
-    loadModelData();
-
-    return () => {
-      mounted = false;
-      if (objectUrl) {
-        URL.revokeObjectURL(objectUrl);
-      }
-      if (model) {
-        model.traverse((child) => {
-          if (child instanceof Mesh) {
-            if (child.geometry) {
-              child.geometry.dispose();
-            }
-            if (child.material) {
-              if (Array.isArray(child.material)) {
-                child.material.forEach((material: Material) => material.dispose());
-              } else {
-                child.material.dispose();
+        // Configure materials for realistic rendering
+        if (child.material) {
+          const materials = Array.isArray(child.material) ? child.material : [child.material];
+          materials.forEach(material => {
+            if (material instanceof THREE.Material) {
+              if (material instanceof THREE.MeshStandardMaterial || material instanceof THREE.MeshPhysicalMaterial) {
+                material.metalness = 0.7;
+                material.envMapIntensity = 1;
+                material.needsUpdate = true;
+                material.side = THREE.DoubleSide;
               }
             }
-          }
-        });
+          });
+        }
       }
-    };
-  }, [object.url]);
+    });
 
-  const handleTransform = () => {
-    if (groupRef.current) {
-      const { position, rotation, scale } = groupRef.current;
-      updateObject(object.id, {
-        position: [position.x, position.y, position.z],
-        rotation: [rotation.x, rotation.y, rotation.z],
-        scale: [scale.x, scale.y, scale.z],
-      });
-    }
+    // Cleanup function to clear loaded models from memory
+    return () => {
+      console.log('Cleaning up scene object:', object.id);
+      useGLTF.clear(object.modelUrl);
+    };
+  }, [scene, object.modelUrl, object.id]);
+
+  // Handle transform changes
+  const handleTransformChange = () => {
+    if (!groupRef.current) return;
+    
+    const position = groupRef.current.position.toArray() as [number, number, number];
+    const rotation = groupRef.current.rotation.toArray().slice(0, 3) as [number, number, number];
+    const scale = groupRef.current.scale.toArray() as [number, number, number];
+    
+    onUpdate({ position, rotation, scale });
+    invalidate();
   };
 
-  if (error) {
-    return null;
-  }
-
   return (
-    <group
-      ref={groupRef}
-      position={object.position}
-      rotation={object.rotation}
-      scale={object.scale}
-      onClick={(e) => {
-        e.stopPropagation();
-        setSelectedObjectId(object.id);
-      }}
-    >
-      {transformMode && (
+    <>
+      <group
+        ref={groupRef}
+        position={new THREE.Vector3(...object.position)}
+        rotation={new THREE.Euler(...object.rotation)}
+        scale={new THREE.Vector3(...object.scale)}
+        onClick={(e) => {
+          e.stopPropagation();
+          onClick();
+        }}
+      >
+        <primitive object={scene} />
+        {/* Show selection box around selected object */}
+        {isSelected && (
+          <boxHelper args={[scene, '#00ff00']} />
+        )}
+      </group>
+
+      {/* Transform Controls */}
+      {isSelected && groupRef.current && (
         <TransformControls
+          object={groupRef.current}
           mode={transformMode}
-          object={groupRef}
-          onObjectChange={handleTransform}
+          onObjectChange={handleTransformChange}
         />
       )}
-      {model && <primitive object={model} />}
-    </group>
+    </>
   );
-};
+}

@@ -1,0 +1,108 @@
+# Meshy API Rules
+
+# BASE URL
+BASE_URL = https://api.meshy.ai
+
+# AUTHENTICATION
+AUTHENTICATION:
+  - You must create a Meshy account to use the API.
+  - API Key is required for all endpoints.
+  - Include API Key in the Authorization header as:
+    Authorization: Bearer <YOUR_API_KEY>
+
+# RATE LIMITS
+RATE_LIMITS:
+  - Default rate: 20 requests/second.
+  - Contact support@meshy.ai for higher limits.
+
+# PRICING
+PRICING:
+  Text to Texture: 5 credits/call
+  Text to 3D Beta (Model): 2 credits/call
+  Text to 3D Beta (Textured): 5 credits/call
+  Text to Voxel: 5 credits/call
+  Image to 3D: 5 credits/call
+
+# DATA RETENTION
+DATA_RETENTION:
+  - Models are retained for 3 days.
+  - Download locally for long-term use.
+
+# ENDPOINTS
+ENDPOINTS:
+  - Text to Texture API
+    POST /v1/text-to-texture
+    GET /v1/text-to-texture/:id
+
+  - Text to 3D API
+    POST /v2/text-to-3d (Preview Task)
+    POST /v2/text-to-3d (Refine Task)
+    GET /v2/text-to-3d/:id
+
+  - Text to Voxel API
+    POST /v1/text-to-voxel
+    GET /v1/text-to-voxel/:id
+
+  - Image to 3D API
+    POST /v1/image-to-3d
+    GET /v1/image-to-3d/:id
+
+# REQUEST PARAMETERS
+REQUEST_PARAMETERS:
+  Text to Texture:
+    - Required:
+      - model_url (string): URL to the 3D model.
+      - object_prompt (string): Object description.
+      - style_prompt (string): Desired style.
+    - Optional:
+      - enable_original_uv (boolean, default: true): Use original UV.
+      - enable_pbr (boolean, default: true): Generate PBR maps.
+      - resolution (string): Available values: 1024, 2048, 4096.
+
+  Text to 3D:
+    - Preview:
+      - Required:
+        - mode (string): "preview".
+        - prompt (string): Object description.
+      - Optional:
+        - art_style (string): realistic, cartoon, etc.
+    - Refine:
+      - Required:
+        - mode (string): "refine".
+        - preview_task_id (string): Task ID of the preview task.
+      - Optional:
+        - texture_richness (string): high, medium, low, none.
+
+  Text to Voxel:
+    - Required:
+      - voxel_size_shrink_factor (integer): 8, 4, 2, or 1.
+      - prompt (string): Object description.
+
+  Image to 3D:
+    - Required:
+      - image_url (string): Public image URL or base64-encoded data.
+    - Optional:
+      - enable_pbr (boolean, default: true): Generate PBR maps.
+
+# ERROR CODES
+ERROR_CODES:
+  200 OK: Successful request.
+  202 Accepted: Task processing.
+  400 Bad Request: Invalid input or parameters.
+  401 Unauthorized: Invalid API Key.
+  402 Payment Required: Insufficient credits.
+  404 Not Found: Resource does not exist.
+  429 Too Many Requests: Rate limit exceeded.
+  5xx Server Error: Internal server issues.
+
+# SECURITY
+SECURITY:
+  - Use HTTPS for all requests.
+  - API keys are shown only once. Store securely.
+  - Revoke compromised keys immediately via the dashboard.
+  - Report security issues to support@meshy.ai.
+
+# STORAGE
+STORAGE:
+  - Generated models are deleted after 3 days.
+  - Save results locally for extended usage.

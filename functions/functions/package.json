@@ -1,0 +1,6 @@
+{
+  "dependencies": {
+    "@types/unzipper": "^0.10.10",
+    "unzipper": "^0.12.3"
+  }
+}

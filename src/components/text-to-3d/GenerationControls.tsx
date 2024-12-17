@@ -36,7 +36,7 @@ export const GenerationControls: React.FC<GenerationControlsProps> = ({
   const maxCharacters = 500;
 
   return (
-    <form onSubmit={handleSubmit} className="bg-[#121214] rounded-lg border border-[#242429] p-4 space-y-6">
+    <form onSubmit={handleSubmit} className="border border-[#242429] rounded-lg p-4 space-y-6">
       <div>
         <label className="block text-sm font-medium mb-2">Prompt</label>
         <textarea

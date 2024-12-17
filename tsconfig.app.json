@@ -2,10 +2,10 @@
   "extends": "./tsconfig.json",
   "compilerOptions": {
     "composite": true,
-    "outDir": "./dist",
-    "rootDir": "./src",
-    "types": ["vite/client"]
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "outDir": "./dist"
   },
-  "include": ["src"],
-  "exclude": ["src/**/*.spec.ts"]
+  "include": ["src/**/*.ts", "src/**/*.tsx"]
 }

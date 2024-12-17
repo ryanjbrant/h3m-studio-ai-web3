@@ -18,6 +18,7 @@ interface Web3State {
   isConnecting: boolean;
   error: string | null;
   chainId: number | null;
+  isMetaMaskInstalled: boolean;
 }
 
 export const useWeb3 = (): Web3State => {
@@ -25,9 +26,18 @@ export const useWeb3 = (): Web3State => {
   const [chainId, setChainId] = useState<number | null>(null);
   const [isConnecting, setIsConnecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isMetaMaskInstalled, setIsMetaMaskInstalled] = useState<boolean>(false);
+
+  // Check if MetaMask is installed
+  useEffect(() => {
+    setIsMetaMaskInstalled(!!window.ethereum?.isMetaMask);
+  }, []);
 
   const checkAndSwitchChain = async () => {
-    if (!window.ethereum) return;
+    if (!window.ethereum) {
+      setError('Please install MetaMask');
+      return;
+    }
     
     try {
       const currentChainId = await window.ethereum.request({ method: 'eth_chainId' });
@@ -75,7 +85,8 @@ export const useWeb3 = (): Web3State => {
 
   const connect = useCallback(async () => {
     if (!window.ethereum) {
-      setError('Please install MetaMask');
+      setError('Please install MetaMask to connect your wallet');
+      window.open('https://metamask.io/download/', '_blank');
       return;
     }
 
@@ -130,8 +141,12 @@ export const useWeb3 = (): Web3State => {
   // Check initial connection and set up listeners
   useEffect(() => {
     const checkConnection = async () => {
-      if (!window.ethereum) return;
+      if (!window.ethereum) {
+        setIsMetaMaskInstalled(false);
+        return;
+      }
 
+      setIsMetaMaskInstalled(true);
       try {
         const accounts = await window.ethereum.request({ method: 'eth_accounts' });
         if (accounts.length > 0) {
@@ -179,6 +194,7 @@ export const useWeb3 = (): Web3State => {
     connect,
     isConnecting,
     error,
-    chainId
+    chainId,
+    isMetaMaskInstalled
   };
 };
