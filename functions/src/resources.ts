@@ -33,7 +33,16 @@ interface FileMetadata {
   relatedFiles?: string[];
 }
 
-const FILE_TYPE_MAP = {
+interface FileTypeInfo {
+  type: string;
+  subType: string;
+}
+
+interface FileTypeMap {
+  [key: string]: FileTypeInfo;
+}
+
+const FILE_TYPE_MAP: FileTypeMap = {
   // 3D Models
   fbx: { type: 'models', subType: 'fbx' },
   gltf: { type: 'models', subType: 'gltf' },
@@ -188,7 +197,10 @@ export const proxyMeshyAsset = onRequest(async (req, res) => {
     res.set('Content-Type', response.headers.get('content-type') || 'application/octet-stream');
     res.set('Access-Control-Allow-Origin', '*');
     
-    // Stream the response
+    // Stream the response with null check
+    if (!response.body) {
+      throw new Error('No response body received');
+    }
     response.body.pipe(res);
   } catch (error) {
     console.error('Error proxying Meshy asset:', error);

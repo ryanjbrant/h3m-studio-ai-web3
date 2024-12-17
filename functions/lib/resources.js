@@ -144,7 +144,10 @@ exports.proxyMeshyAsset = (0, https_1.onRequest)(async (req, res) => {
         // Forward the content type
         res.set('Content-Type', response.headers.get('content-type') || 'application/octet-stream');
         res.set('Access-Control-Allow-Origin', '*');
-        // Stream the response
+        // Stream the response with null check
+        if (!response.body) {
+            throw new Error('No response body received');
+        }
         response.body.pipe(res);
     }
     catch (error) {

@@ -2,18 +2,24 @@ import { onSchedule } from 'firebase-functions/v2/scheduler';
 import { onDocumentCreated } from 'firebase-functions/v2/firestore';
 import { onCall } from 'firebase-functions/v2/https';
 import * as admin from 'firebase-admin';
-import * as functions from 'firebase-functions';
 import * as os from 'os';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as Busboy from 'busboy';
 import { Storage } from '@google-cloud/storage';
+import { onRequest } from 'firebase-functions/v2/https';
+import { Request, Response } from 'express';
 
-admin.initializeApp();
+// Initialize Firebase Admin only if not already initialized
+if (!admin.apps.length) {
+  admin.initializeApp({
+    storageBucket: 'h3m-studio-b17e2.appspot.com'
+  });
+}
 
 const db = admin.firestore();
 const storage = new Storage();
-const bucket = storage.bucket(process.env.FIREBASE_STORAGE_BUCKET || '');
+const bucket = storage.bucket('h3m-studio-b17e2.appspot.com');
 
 export const cleanupExpiredGenerations = onSchedule('0 0 * * *', async (event) => {
   const now = admin.firestore.Timestamp.now();
@@ -124,102 +130,109 @@ export const saveScene = onCall(async (request) => {
   }
 });
 
-export const convertUsdzToGlb = functions.runWith({
-  timeoutSeconds: 540,
-  memory: '2GB',
-}).https.onRequest(async (req, res) => {
-  if (req.method !== 'POST') {
-    res.status(405).send('Method Not Allowed');
-    return;
-  }
-
-  const busboy = Busboy({ headers: req.headers });
-  const tmpdir = os.tmpdir();
-  const uploads: { [key: string]: string } = {};
-
-  busboy.on('file', (fieldname: string, file: NodeJS.ReadableStream, info: { filename: string }) => {
-    if (!info.filename) return;
-    
-    const filepath = path.join(tmpdir, info.filename);
-    uploads[fieldname] = filepath;
-    
-    const writeStream = fs.createWriteStream(filepath);
-    file.pipe(writeStream);
-  });
-
-  busboy.on('finish', async () => {
-    const inputFile = uploads['file'];
-    if (!inputFile) {
-      res.status(400).send('No file uploaded');
+export const convertUsdzToGlb = onRequest(
+  { 
+    memory: '1GiB',
+    timeoutSeconds: 540
+  }, 
+  async (req: Request & { rawBody?: Buffer }, res: Response) => {
+    if (req.method !== 'POST') {
+      res.status(405).send('Method Not Allowed');
       return;
     }
 
-    try {
-      // Generate unique filenames
-      const timestamp = Date.now();
-      const inputFilename = `${timestamp}-${path.basename(inputFile)}`;
-      const outputFilename = `${timestamp}-${path.basename(inputFile, '.usdz')}.glb`;
+    const busboy = Busboy({ headers: req.headers });
+    const tmpdir = os.tmpdir();
+    const uploads: { [key: string]: string } = {};
+
+    busboy.on('file', (fieldname: string, file: NodeJS.ReadableStream, info: { filename: string }) => {
+      if (!info.filename) return;
       
-      // Upload the input file to Cloud Storage
-      await bucket.upload(inputFile, {
-        destination: `conversions/input/${inputFilename}`,
-        metadata: {
-          contentType: 'model/vnd.usdz+zip'
+      const filepath = path.join(tmpdir, info.filename);
+      uploads[fieldname] = filepath;
+      
+      const writeStream = fs.createWriteStream(filepath);
+      file.pipe(writeStream);
+    });
+
+    busboy.on('finish', async () => {
+      const inputFile = uploads['file'];
+      if (!inputFile) {
+        res.status(400).send('No file uploaded');
+        return;
+      }
+
+      try {
+        // Generate unique filenames
+        const timestamp = Date.now();
+        const inputFilename = `${timestamp}-${path.basename(inputFile)}`;
+        const outputFilename = `${timestamp}-${path.basename(inputFile, '.usdz')}.glb`;
+        
+        // Upload the input file to Cloud Storage
+        await bucket.upload(inputFile, {
+          destination: `conversions/input/${inputFilename}`,
+          metadata: {
+            contentType: 'model/vnd.usdz+zip'
+          }
+        });
+
+        // Get signed URLs for input and output
+        const [inputUrl] = await bucket.file(`conversions/input/${inputFilename}`).getSignedUrl({
+          version: 'v4',
+          action: 'read',
+          expires: Date.now() + 15 * 60 * 1000 // 15 minutes
+        });
+
+        // Call the Cloud Run service for conversion
+        const cloudRunUrl = process.env.CONVERSION_SERVICE_URL;
+        if (!cloudRunUrl) {
+          throw new Error('CONVERSION_SERVICE_URL environment variable not set');
         }
-      });
 
-      // Get signed URLs for input and output
-      const [inputUrl] = await bucket.file(`conversions/input/${inputFilename}`).getSignedUrl({
-        version: 'v4',
-        action: 'read',
-        expires: Date.now() + 15 * 60 * 1000 // 15 minutes
-      });
+        const response = await fetch(cloudRunUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            inputUrl,
+            outputBucket: bucket.name,
+            outputPath: `conversions/output/${outputFilename}`
+          })
+        });
 
-      // Call the Cloud Run service for conversion
-      const cloudRunUrl = process.env.CONVERSION_SERVICE_URL;
-      if (!cloudRunUrl) {
-        throw new Error('CONVERSION_SERVICE_URL environment variable not set');
+        if (!response.ok) {
+          throw new Error(`Conversion service returned status ${response.status}`);
+        }
+
+        // Get signed URL for the converted file
+        const [outputUrl] = await bucket.file(`conversions/output/${outputFilename}`).getSignedUrl({
+          version: 'v4',
+          action: 'read',
+          expires: Date.now() + 24 * 60 * 60 * 1000 // 24 hours
+        });
+
+        res.json({
+          message: 'File converted successfully',
+          originalName: path.basename(inputFile),
+          convertedName: outputFilename,
+          downloadUrl: outputUrl
+        });
+
+        // Clean up temporary files
+        Object.values(uploads).forEach(filepath => {
+          fs.unlinkSync(filepath);
+        });
+      } catch (error) {
+        console.error('Error processing file:', error);
+        res.status(500).send('Error processing file');
       }
+    });
 
-      const response = await fetch(cloudRunUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          inputUrl,
-          outputBucket: bucket.name,
-          outputPath: `conversions/output/${outputFilename}`
-        })
-      });
-
-      if (!response.ok) {
-        throw new Error(`Conversion service returned status ${response.status}`);
-      }
-
-      // Get signed URL for the converted file
-      const [outputUrl] = await bucket.file(`conversions/output/${outputFilename}`).getSignedUrl({
-        version: 'v4',
-        action: 'read',
-        expires: Date.now() + 24 * 60 * 60 * 1000 // 24 hours
-      });
-
-      res.json({
-        message: 'File converted successfully',
-        originalName: path.basename(inputFile),
-        convertedName: outputFilename,
-        downloadUrl: outputUrl
-      });
-
-      // Clean up temporary files
-      Object.values(uploads).forEach(filepath => {
-        fs.unlinkSync(filepath);
-      });
-    } catch (error) {
-      console.error('Error processing file:', error);
-      res.status(500).send('Error processing file');
+    if (req.rawBody) {
+      busboy.end(req.rawBody);
     }
-  });
+  }
+);
 
-  busboy.end(req.rawBody);
-}); 
+export * from './resources'; 

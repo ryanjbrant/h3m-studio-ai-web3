@@ -1,19 +1,39 @@
 "use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __exportStar = (this && this.__exportStar) || function(m, exports) {
+    for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.convertUsdzToGlb = exports.saveScene = exports.onGenerationCreated = exports.cleanupExpiredGenerations = void 0;
 const scheduler_1 = require("firebase-functions/v2/scheduler");
 const firestore_1 = require("firebase-functions/v2/firestore");
 const https_1 = require("firebase-functions/v2/https");
 const admin = require("firebase-admin");
-const functions = require("firebase-functions");
 const os = require("os");
 const path = require("path");
 const fs = require("fs");
 const Busboy = require("busboy");
 const storage_1 = require("@google-cloud/storage");
-admin.initializeApp();
+const https_2 = require("firebase-functions/v2/https");
+// Initialize Firebase Admin only if not already initialized
+if (!admin.apps.length) {
+    admin.initializeApp({
+        storageBucket: 'h3m-studio-b17e2.appspot.com'
+    });
+}
 const db = admin.firestore();
 const storage = new storage_1.Storage();
+const bucket = storage.bucket('h3m-studio-b17e2.appspot.com');
 exports.cleanupExpiredGenerations = (0, scheduler_1.onSchedule)('0 0 * * *', async (event) => {
     const now = admin.firestore.Timestamp.now();
     try {
@@ -29,15 +49,15 @@ exports.cleanupExpiredGenerations = (0, scheduler_1.onSchedule)('0 0 * * *', asy
             if (data.modelUrls) {
                 Object.values(data.modelUrls).forEach(url => {
                     if (typeof url === 'string') {
-                        const path = decodeURIComponent(url.split('/o/')[1].split('?')[0]);
-                        const fileRef = storage.bucket().file(path);
+                        const filePath = decodeURIComponent(url.split('/o/')[1].split('?')[0]);
+                        const fileRef = bucket.file(filePath);
                         deletePromises.push(fileRef.delete().then(() => { }).catch(() => { }));
                     }
                 });
             }
             if (data.thumbnailUrl) {
-                const path = decodeURIComponent(data.thumbnailUrl.split('/o/')[1].split('?')[0]);
-                const fileRef = storage.bucket().file(path);
+                const filePath = decodeURIComponent(data.thumbnailUrl.split('/o/')[1].split('?')[0]);
+                const fileRef = bucket.file(filePath);
                 deletePromises.push(fileRef.delete().then(() => { }).catch(() => { }));
             }
             // Delete Firestore document
@@ -110,10 +130,10 @@ exports.saveScene = (0, https_1.onCall)(async (request) => {
         throw new Error('Error saving scene');
     }
 });
-exports.convertUsdzToGlb = functions.runWith({
-    timeoutSeconds: 540,
-    memory: '2GB',
-}).https.onRequest(async (req, res) => {
+exports.convertUsdzToGlb = (0, https_2.onRequest)({
+    memory: '1GiB',
+    timeoutSeconds: 540
+}, async (req, res) => {
     if (req.method !== 'POST') {
         res.status(405).send('Method Not Allowed');
         return;
@@ -121,10 +141,10 @@ exports.convertUsdzToGlb = functions.runWith({
     const busboy = Busboy({ headers: req.headers });
     const tmpdir = os.tmpdir();
     const uploads = {};
-    busboy.on('file', (fieldname, file, { filename }) => {
-        if (!filename)
+    busboy.on('file', (fieldname, file, info) => {
+        if (!info.filename)
             return;
-        const filepath = path.join(tmpdir, filename);
+        const filepath = path.join(tmpdir, info.filename);
         uploads[fieldname] = filepath;
         const writeStream = fs.createWriteStream(filepath);
         file.pipe(writeStream);
@@ -136,21 +156,55 @@ exports.convertUsdzToGlb = functions.runWith({
             return;
         }
         try {
-            // Generate unique output path
-            const outputFilename = path.basename(inputFile, '.usdz') + '.glb';
-            const bucket = storage.bucket('your-firebase-storage-bucket');
+            // Generate unique filenames
+            const timestamp = Date.now();
+            const inputFilename = `${timestamp}-${path.basename(inputFile)}`;
+            const outputFilename = `${timestamp}-${path.basename(inputFile, '.usdz')}.glb`;
             // Upload the input file to Cloud Storage
             await bucket.upload(inputFile, {
-                destination: `conversions/input/${path.basename(inputFile)}`,
+                destination: `conversions/input/${inputFilename}`,
+                metadata: {
+                    contentType: 'model/vnd.usdz+zip'
+                }
             });
-            // Here we would typically trigger a Cloud Run service to do the actual conversion
-            // For now, we'll return a placeholder response
+            // Get signed URLs for input and output
+            const [inputUrl] = await bucket.file(`conversions/input/${inputFilename}`).getSignedUrl({
+                version: 'v4',
+                action: 'read',
+                expires: Date.now() + 15 * 60 * 1000 // 15 minutes
+            });
+            // Call the Cloud Run service for conversion
+            const cloudRunUrl = process.env.CONVERSION_SERVICE_URL;
+            if (!cloudRunUrl) {
+                throw new Error('CONVERSION_SERVICE_URL environment variable not set');
+            }
+            const response = await fetch(cloudRunUrl, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    inputUrl,
+                    outputBucket: bucket.name,
+                    outputPath: `conversions/output/${outputFilename}`
+                })
+            });
+            if (!response.ok) {
+                throw new Error(`Conversion service returned status ${response.status}`);
+            }
+            // Get signed URL for the converted file
+            const [outputUrl] = await bucket.file(`conversions/output/${outputFilename}`).getSignedUrl({
+                version: 'v4',
+                action: 'read',
+                expires: Date.now() + 24 * 60 * 60 * 1000 // 24 hours
+            });
             res.json({
-                message: 'File uploaded successfully',
+                message: 'File converted successfully',
                 originalName: path.basename(inputFile),
                 convertedName: outputFilename,
+                downloadUrl: outputUrl
             });
-            // Clean up
+            // Clean up temporary files
             Object.values(uploads).forEach(filepath => {
                 fs.unlinkSync(filepath);
             });
@@ -160,6 +214,9 @@ exports.convertUsdzToGlb = functions.runWith({
             res.status(500).send('Error processing file');
         }
     });
-    busboy.end(req.rawBody);
+    if (req.rawBody) {
+        busboy.end(req.rawBody);
+    }
 });
+__exportStar(require("./resources"), exports);
 //# sourceMappingURL=index.js.map
