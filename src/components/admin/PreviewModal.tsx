@@ -4,12 +4,17 @@ import { GLTFLoader, GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { USDZLoader } from 'three/examples/jsm/loaders/USDZLoader.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 
+interface TextureFile {
+  name: string;
+  url?: string;
+}
+
 interface PreviewModalProps {
-  file: File;
+  file: File | string;
   sceneFiles?: {
-    gltf: File;
-    bin?: File;
-    textures: File[];
+    gltf: File | string;
+    bin?: File | string;
+    textures: (File | TextureFile)[];
   };
   onClose: () => void;
   onSnapshotTaken: (snapshot: string) => void;
@@ -63,31 +68,67 @@ export const PreviewModal: React.FC<PreviewModalProps> = ({
     const loadModel = async () => {
       try {
         if (sceneFiles) {
-          // Handle GLTF scene from zip
+          // Handle GLTF scene
           const loader = new GLTFLoader();
           const manager = new THREE.LoadingManager();
           const textureUrls = new Map<string, string>();
           
-          // Create blob URLs for textures
-          sceneFiles.textures.forEach(texture => {
-            const url = URL.createObjectURL(texture);
-            textureUrls.set(texture.name, url);
-          });
+          // Get texture URLs
+          for (const texture of sceneFiles.textures) {
+            if (texture instanceof File) {
+              const url = URL.createObjectURL(texture);
+              textureUrls.set(texture.name, url);
+            } else {
+              textureUrls.set(texture.name, texture.url || '');
+            }
+          }
 
-          // Create blob URL for bin file if it exists
+          // Get bin URL if it exists
           let binUrl: string | undefined;
           if (sceneFiles.bin) {
-            binUrl = URL.createObjectURL(sceneFiles.bin);
+            binUrl = sceneFiles.bin instanceof File 
+              ? URL.createObjectURL(sceneFiles.bin)
+              : sceneFiles.bin;
+          }
+
+          // Read or use GLTF content
+          let gltfContent: string;
+          if (sceneFiles.gltf instanceof File) {
+            gltfContent = await new Promise<string>((resolve) => {
+              const reader = new FileReader();
+              reader.onload = (e) => resolve(e.target?.result as string);
+              reader.readAsText(sceneFiles.gltf as Blob);
+            });
+          } else {
+            const response = await fetch(sceneFiles.gltf);
+            gltfContent = await response.text();
+          }
+
+          const gltfData = JSON.parse(gltfContent);
+          const textureNames = new Set<string>();
+
+          // Extract texture file names from GLTF
+          if (gltfData.images) {
+            gltfData.images.forEach((image: { uri?: string }) => {
+              if (image.uri) {
+                const fileName = image.uri.split('/').pop();
+                if (fileName) textureNames.add(fileName);
+              }
+            });
           }
 
           // Modify URLs in the manager
           manager.setURLModifier((url) => {
             const filename = url.split('/').pop();
             if (filename) {
+              // Check if this is a texture file
               if (textureUrls.has(filename)) {
+                console.log('Loading texture:', filename);
                 return textureUrls.get(filename)!;
               }
+              // Check if this is the bin file
               if (binUrl && filename.endsWith('.bin')) {
+                console.log('Loading bin file:', filename);
                 return binUrl;
               }
             }
@@ -95,31 +136,47 @@ export const PreviewModal: React.FC<PreviewModalProps> = ({
           });
 
           loader.manager = manager;
-          const gltfUrl = URL.createObjectURL(sceneFiles.gltf);
+          const gltfUrl = sceneFiles.gltf instanceof File
+            ? URL.createObjectURL(sceneFiles.gltf)
+            : sceneFiles.gltf;
+          
           const gltf = await new Promise<GLTF>((resolve, reject) => {
-            loader.load(gltfUrl, resolve, undefined, reject);
+            loader.load(gltfUrl, resolve, undefined, (error) => {
+              console.error('Error loading GLTF:', error);
+              reject(error);
+            });
           });
 
           // Clean up blob URLs
-          URL.revokeObjectURL(gltfUrl);
-          if (binUrl) URL.revokeObjectURL(binUrl);
-          textureUrls.forEach(url => URL.revokeObjectURL(url));
+          if (sceneFiles.gltf instanceof File) {
+            URL.revokeObjectURL(gltfUrl);
+          }
+          if (binUrl && sceneFiles.bin instanceof File) {
+            URL.revokeObjectURL(binUrl);
+          }
+          textureUrls.forEach((url, name) => {
+            const texture = sceneFiles.textures.find(t => 
+              t instanceof File ? t.name === name : t.name === name
+            );
+            if (texture instanceof File) {
+              URL.revokeObjectURL(url);
+            }
+          });
 
           return gltf;
         } else {
           // Handle GLB or USDZ file
-          const url = URL.createObjectURL(file);
+          const url = file instanceof File ? URL.createObjectURL(file) : file;
           let gltf: GLTF | THREE.Group;
 
-          if (file.name.toLowerCase().endsWith('.usdz')) {
+          if ((file instanceof File ? file.name : url).toLowerCase().endsWith('.usdz')) {
             const loader = new USDZLoader();
             const model = await new Promise<THREE.Mesh>((resolve, reject) => {
               loader.load(url, resolve, undefined, reject);
             });
-            // Create a group to hold the model
             const group = new THREE.Group();
             group.add(model);
-            gltf = { scene: group } as GLTF; // Convert to compatible format
+            gltf = { scene: group } as GLTF;
           } else {
             const loader = new GLTFLoader();
             gltf = await new Promise<GLTF>((resolve, reject) => {
@@ -127,10 +184,13 @@ export const PreviewModal: React.FC<PreviewModalProps> = ({
             });
           }
 
-          URL.revokeObjectURL(url);
+          if (file instanceof File) {
+            URL.revokeObjectURL(url);
+          }
           return gltf;
         }
       } catch (error) {
+        console.error('Model loading error:', error);
         throw error;
       }
     };
@@ -151,7 +211,7 @@ export const PreviewModal: React.FC<PreviewModalProps> = ({
       })
       .catch((error) => {
         console.error('Error loading model:', error);
-        setError('Failed to load 3D model. Please try again.');
+        setError('Failed to load 3D model. Please check the file format and try again.');
         setIsLoading(false);
       });
 

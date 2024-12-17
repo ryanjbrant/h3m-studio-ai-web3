@@ -26,9 +26,11 @@ export const ModelPreview: React.FC<ModelPreviewProps> = ({
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const [preview, setPreview] = useState<string | null>(previewUrl || null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  // If we have a preview URL and aren't generating a new preview, just show the image
-  if (preview && !generatePreview) {
+  // If we have a preview URL and aren't generating a new preview, and we're in card preview mode
+  if (preview && !generatePreview && !modelUrl) {
     return (
       <div 
         ref={containerRef}
@@ -44,9 +46,9 @@ export const ModelPreview: React.FC<ModelPreviewProps> = ({
     );
   }
 
-  // Only set up 3D preview if we need to generate one
+  // Set up 3D preview
   useEffect(() => {
-    if (!containerRef.current || !generatePreview) return;
+    if (!containerRef.current) return;
 
     const container = containerRef.current;
     const scene = new THREE.Scene();
@@ -72,9 +74,9 @@ export const ModelPreview: React.FC<ModelPreviewProps> = ({
 
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
-    controls.autoRotate = true;
+    controls.autoRotate = !generatePreview; // Only auto-rotate in viewer mode
     controls.autoRotateSpeed = 2;
-    controls.enableZoom = false;
+    controls.enableZoom = !generatePreview; // Enable zoom in viewer mode
 
     loader.load(modelUrl, (gltf) => {
       const box = new THREE.Box3().setFromObject(gltf.scene);
@@ -94,51 +96,74 @@ export const ModelPreview: React.FC<ModelPreviewProps> = ({
         renderer.render(scene, camera);
       }
 
-      // Capture the preview
-      const dataUrl = renderer.domElement.toDataURL('image/png');
-      setPreview(dataUrl);
+      if (generatePreview) {
+        // Capture the preview
+        const dataUrl = renderer.domElement.toDataURL('image/png');
+        setPreview(dataUrl);
 
-      // Clean up 3D resources after capturing preview
-      scene.clear();
-      controls.dispose();
-      renderer.domElement.remove();
+        // Clean up 3D resources after capturing preview
+        scene.clear();
+        controls.dispose();
+        renderer.domElement.remove();
+      }
+      
+      setIsLoading(false);
+    }, undefined, (error) => {
+      console.error('Error loading model:', error);
+      setError('Failed to load 3D model');
+      setIsLoading(false);
     });
 
+    // Animation loop for viewer mode
+    let animationFrameId: number;
+    if (!generatePreview) {
+      const animate = () => {
+        animationFrameId = requestAnimationFrame(animate);
+        controls.update();
+        renderer.render(scene, camera);
+      };
+      animate();
+    }
+
+    // Handle window resize
+    const handleResize = () => {
+      if (!container) return;
+      const width = container.clientWidth;
+      const height = container.clientHeight;
+      camera.aspect = width / height;
+      camera.updateProjectionMatrix();
+      renderer.setSize(width, height);
+    };
+    window.addEventListener('resize', handleResize);
+
     return () => {
+      window.removeEventListener('resize', handleResize);
+      if (animationFrameId) {
+        cancelAnimationFrame(animationFrameId);
+      }
+      controls.dispose();
       scene.clear();
-      controls?.dispose();
       if (renderer.domElement.parentElement === container) {
         container.removeChild(renderer.domElement);
       }
     };
   }, [modelUrl, generatePreview]);
 
-  // Show loading state while generating preview
-  if (generatePreview && !preview) {
-    return (
-      <div 
-        ref={containerRef}
-        className={`${className} relative flex items-center justify-center`}
-        style={{ minHeight: '200px' }}
-      >
-        <span className="text-sm text-gray-400">Generating preview...</span>
-      </div>
-    );
-  }
-
-  // Show generated preview
   return (
     <div 
       ref={containerRef}
       className={`${className} relative overflow-hidden`}
       style={{ minHeight: '200px' }}
     >
-      {preview && (
-        <img 
-          src={preview} 
-          alt="Model preview"
-          className="w-full h-full object-cover"
-        />
+      {isLoading && (
+        <div className="absolute inset-0 flex items-center justify-center bg-[#242429] bg-opacity-50">
+          <span className="text-sm text-gray-400">Loading model...</span>
+        </div>
+      )}
+      {error && (
+        <div className="absolute inset-0 flex items-center justify-center bg-[#242429] bg-opacity-50">
+          <span className="text-sm text-red-500">{error}</span>
+        </div>
       )}
     </div>
   );

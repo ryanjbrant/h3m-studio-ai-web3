@@ -33,6 +33,121 @@
     9. Test thoroughly in new branch
     10. Create migration guide
 
+## GLTF Resource Handling
+
+### Uploading GLTF Models
+1. Zip the GLTF model with all its dependencies (textures, bin files)
+2. Drag and drop the ZIP file into the upload area
+3. System extracts and validates:
+   - GLTF file
+   - Binary (.bin) files
+   - Texture files (png, jpg)
+4. Preview modal shows 3D model with textures before upload
+5. Take snapshot for thumbnail
+6. Upload confirmed files to storage
+
+### File Structure Requirements
+- ZIP file must contain:
+  - Main .gltf file
+  - All referenced texture files
+  - Binary (.bin) files if used
+- Texture paths in GLTF must match filenames
+- All referenced files must be present
+
+## GLTF Resource Preview System
+
+### Resource Card Preview Implementation
+The system handles both direct model files (GLB/USDZ) and GLTF models with textures:
+
+1. **Preview Button**
+   - Each resource card displays a 3D preview button when `resource.model` exists
+   - Clicking triggers the preview modal with proper model loading
+
+2. **GLTF Loading Process**
+   ```typescript
+   // When preview button is clicked:
+   const loadFiles = async () => {
+     // 1. Download and extract zip
+     const zipResponse = await fetch(resource.model.modelUrl);
+     const zip = await JSZip.loadAsync(await zipResponse.blob());
+     
+     // 2. Find required files
+     const gltfFile = Object.values(zip.files).find(f => f.name.endsWith('.gltf'));
+     const binFile = Object.values(zip.files).find(f => f.name.endsWith('.bin'));
+     const textureFiles = Object.values(zip.files).filter(f => 
+       f.name.match(/\.(jpg|jpeg|png|webp)$/i)
+     );
+     
+     // 3. Convert to File objects
+     const gltfFileObj = new File([await gltfFile.async('blob')], gltfFile.name);
+     const binFileObj = binFile ? 
+       new File([await binFile.async('blob')], binFile.name) : undefined;
+     const textureFileObjs = await Promise.all(
+       textureFiles.map(async (file) => 
+         new File([await file.async('blob')], file.name)
+       )
+     );
+   }
+   ```
+
+3. **File Handling**
+   - GLTF files are extracted from zip with all dependencies
+   - Bin files are handled for binary data
+   - Texture files are automatically detected and loaded
+   - All files are converted to proper File objects with correct MIME types
+
+4. **Preview Modal Integration**
+   ```typescript
+   <PreviewModal
+     file={gltfFileObj}
+     sceneFiles={{
+       gltf: gltfFileObj,
+       bin: binFileObj,
+       textures: textureFileObjs
+     }}
+     onClose={handleClose}
+     onSnapshotTaken={handleSnapshot}
+   />
+   ```
+
+5. **Texture Mapping**
+   - PreviewModal automatically maps textures using file names
+   - Texture paths in GLTF file are matched to extracted textures
+   - Supports all common texture formats (jpg, png, webp)
+
+### Key Features
+- Automatic zip extraction
+- Proper MIME type handling
+- Texture path resolution
+- Memory cleanup of blob URLs
+- Support for both GLTF and GLB/USDZ
+- Snapshot capability for thumbnails
+
+### Usage Example
+```typescript
+// Resource object structure
+const resource = {
+  model: {
+    modelUrl: 'path/to/model.zip', // For GLTF with textures
+    modelType: 'gltf',
+    // ... other resource properties
+  }
+};
+
+// Preview will automatically:
+1. Download and extract the zip
+2. Load GLTF with textures
+3. Display in 3D viewer
+4. Enable snapshot capture
+```
+
+### Best Practices
+1. Always provide models in zip format for GLTF
+2. Include all referenced textures
+3. Maintain correct file paths in GLTF
+4. Use proper file extensions
+5. Clean up resources after preview closes
+
 ## System Architecture
 
 ### Frontend Stack
