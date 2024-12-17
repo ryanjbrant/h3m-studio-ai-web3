@@ -9,6 +9,12 @@ service firebase.storage {
       return request.auth.uid == userId;
     }
 
+    function isAdmin() {
+      return request.auth != null && 
+        (request.auth.token.email == 'ryanjbrant@gmail.com' || 
+         firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.role == 'admin');
+    }
+
     // Allow read access to all authenticated users
     match /{allPaths=**} {
       allow read: if isAuthenticated();
@@ -30,6 +36,12 @@ service firebase.storage {
       allow write: if isAuthenticated() && isOwner(userId);
       allow create: if isAuthenticated() && isOwner(userId);
       allow delete: if isAuthenticated() && isOwner(userId);
+    }
+
+    // Resources storage rules
+    match /resources/{allPaths=**} {
+      allow read: if isAuthenticated();
+      allow write, create, delete: if isAdmin();
     }
   }
 }

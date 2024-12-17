@@ -6,7 +6,8 @@ import {
   Box, 
   Settings as SettingsIcon,
   BarChart2,
-  LogOut
+  LogOut,
+  FileText
 } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
 
@@ -14,6 +15,7 @@ const navItems = [
   { icon: LayoutDashboard, label: 'Overview', path: '/admin' },
   { icon: Users, label: 'Users', path: '/admin/users' },
   { icon: Box, label: 'Generations', path: '/admin/generations' },
+  { icon: FileText, label: 'Resources', path: '/admin/resources' },
   { icon: BarChart2, label: 'Analytics', path: '/admin/analytics' },
   { icon: SettingsIcon, label: 'Settings', path: '/admin/settings' }
 ];

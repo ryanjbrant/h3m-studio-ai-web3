@@ -22,8 +22,7 @@ interface SceneObjectProps {
 export function SceneObject({ object, isSelected, transformMode, onClick, onUpdate }: SceneObjectProps) {
   console.log('SceneObject render:', { object, isSelected, transformMode });
   
-  const proxyUrl = `http://localhost:3001/api/model?url=${encodeURIComponent(object.modelUrl)}`;
-  const { scene } = useGLTF(proxyUrl);
+  const { scene } = useGLTF(object.modelUrl);
   const groupRef = useRef<THREE.Group>(null);
   const { invalidate } = useThree();
 
@@ -61,9 +60,9 @@ export function SceneObject({ object, isSelected, transformMode, onClick, onUpda
     // Cleanup function to clear loaded models from memory
     return () => {
       console.log('Cleaning up scene object:', object.id);
-      useGLTF.clear(proxyUrl);
+      useGLTF.clear(object.modelUrl);
     };
-  }, [scene, proxyUrl, object.id]);
+  }, [scene, object.modelUrl, object.id]);
 
   // Handle transform changes
   const handleTransformChange = () => {

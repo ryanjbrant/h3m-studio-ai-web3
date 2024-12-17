@@ -41,11 +41,12 @@ service cloud.firestore {
     
     // Admin collection
     match /admin/{document=**} {
-      allow read: if isAdmin() || (
-        isAuthenticated() && 
-        request.auth.uid == resource.data.userId
-      );
-      allow write: if isAdmin();
+      allow read, write: if isAdmin();
+    }
+
+    // Resources collection
+    match /resources/{resourceId} {
+      allow read, write: if isAdmin();
     }
   }
 }

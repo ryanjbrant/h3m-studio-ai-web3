@@ -87,14 +87,14 @@ export const getStorageStats = async () => {
 
 const GENERATIONS_PER_PAGE = 20;
 
-export async function getGenerations(
-  lastTimestamp?: Timestamp,
-  filters?: {
-    userId?: string;
-    type?: 'text' | 'image';
-    status?: 'pending' | 'complete' | 'failed';
-  }
-) {
+interface GenerationFilters {
+  userId?: string;
+  type?: 'text' | 'image';
+  status?: 'pending' | 'complete' | 'failed';
+  limit?: number;
+}
+
+export const getGenerations = async (lastTimestamp?: Timestamp, filters: GenerationFilters = {}) => {
   try {
     let q = query(
       collection(db, 'generations'),
@@ -127,7 +127,7 @@ export async function getGenerations(
     console.error('Error fetching generations:', error);
     throw error;
   }
-}
+};
 
 export async function getUsersWithGenerations(lastUserId?: string) {
   try {

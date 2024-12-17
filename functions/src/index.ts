@@ -2,11 +2,18 @@ import { onSchedule } from 'firebase-functions/v2/scheduler';
 import { onDocumentCreated } from 'firebase-functions/v2/firestore';
 import { onCall } from 'firebase-functions/v2/https';
 import * as admin from 'firebase-admin';
+import * as functions from 'firebase-functions';
+import * as os from 'os';
+import * as path from 'path';
+import * as fs from 'fs';
+import * as Busboy from 'busboy';
+import { Storage } from '@google-cloud/storage';
 
 admin.initializeApp();
 
 const db = admin.firestore();
-const storage = admin.storage();
+const storage = new Storage();
+const bucket = storage.bucket(process.env.FIREBASE_STORAGE_BUCKET || '');
 
 export const cleanupExpiredGenerations = onSchedule('0 0 * * *', async (event) => {
   const now = admin.firestore.Timestamp.now();
@@ -27,16 +34,16 @@ export const cleanupExpiredGenerations = onSchedule('0 0 * * *', async (event) =
       if (data.modelUrls) {
         Object.values(data.modelUrls).forEach(url => {
           if (typeof url === 'string') {
-            const path = decodeURIComponent(url.split('/o/')[1].split('?')[0]);
-            const fileRef = storage.bucket().file(path);
+            const filePath = decodeURIComponent(url.split('/o/')[1].split('?')[0]);
+            const fileRef = bucket.file(filePath);
             deletePromises.push(fileRef.delete().then(() => {}).catch(() => {}));
           }
         });
       }
 
       if (data.thumbnailUrl) {
-        const path = decodeURIComponent(data.thumbnailUrl.split('/o/')[1].split('?')[0]);
-        const fileRef = storage.bucket().file(path);
+        const filePath = decodeURIComponent(data.thumbnailUrl.split('/o/')[1].split('?')[0]);
+        const fileRef = bucket.file(filePath);
         deletePromises.push(fileRef.delete().then(() => {}).catch(() => {}));
       }
 
@@ -115,4 +122,104 @@ export const saveScene = onCall(async (request) => {
     console.error('Error saving scene:', error);
     throw new Error('Error saving scene');
   }
+});
+
+export const convertUsdzToGlb = functions.runWith({
+  timeoutSeconds: 540,
+  memory: '2GB',
+}).https.onRequest(async (req, res) => {
+  if (req.method !== 'POST') {
+    res.status(405).send('Method Not Allowed');
+    return;
+  }
+
+  const busboy = Busboy({ headers: req.headers });
+  const tmpdir = os.tmpdir();
+  const uploads: { [key: string]: string } = {};
+
+  busboy.on('file', (fieldname: string, file: NodeJS.ReadableStream, info: { filename: string }) => {
+    if (!info.filename) return;
+    
+    const filepath = path.join(tmpdir, info.filename);
+    uploads[fieldname] = filepath;
+    
+    const writeStream = fs.createWriteStream(filepath);
+    file.pipe(writeStream);
+  });
+
+  busboy.on('finish', async () => {
+    const inputFile = uploads['file'];
+    if (!inputFile) {
+      res.status(400).send('No file uploaded');
+      return;
+    }
+
+    try {
+      // Generate unique filenames
+      const timestamp = Date.now();
+      const inputFilename = `${timestamp}-${path.basename(inputFile)}`;
+      const outputFilename = `${timestamp}-${path.basename(inputFile, '.usdz')}.glb`;
+      
+      // Upload the input file to Cloud Storage
+      await bucket.upload(inputFile, {
+        destination: `conversions/input/${inputFilename}`,
+        metadata: {
+          contentType: 'model/vnd.usdz+zip'
+        }
+      });
+
+      // Get signed URLs for input and output
+      const [inputUrl] = await bucket.file(`conversions/input/${inputFilename}`).getSignedUrl({
+        version: 'v4',
+        action: 'read',
+        expires: Date.now() + 15 * 60 * 1000 // 15 minutes
+      });
+
+      // Call the Cloud Run service for conversion
+      const cloudRunUrl = process.env.CONVERSION_SERVICE_URL;
+      if (!cloudRunUrl) {
+        throw new Error('CONVERSION_SERVICE_URL environment variable not set');
+      }
+
+      const response = await fetch(cloudRunUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          inputUrl,
+          outputBucket: bucket.name,
+          outputPath: `conversions/output/${outputFilename}`
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`Conversion service returned status ${response.status}`);
+      }
+
+      // Get signed URL for the converted file
+      const [outputUrl] = await bucket.file(`conversions/output/${outputFilename}`).getSignedUrl({
+        version: 'v4',
+        action: 'read',
+        expires: Date.now() + 24 * 60 * 60 * 1000 // 24 hours
+      });
+
+      res.json({
+        message: 'File converted successfully',
+        originalName: path.basename(inputFile),
+        convertedName: outputFilename,
+        downloadUrl: outputUrl
+      });
+
+      // Clean up temporary files
+      Object.values(uploads).forEach(filepath => {
+        fs.unlinkSync(filepath);
+      });
+    } catch (error) {
+      console.error('Error processing file:', error);
+      res.status(500).send('Error processing file');
+    }
+  });
+
+  busboy.end(req.rawBody);
 }); 

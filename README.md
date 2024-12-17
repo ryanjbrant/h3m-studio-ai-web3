@@ -1,5 +1,38 @@
 # H3M Studio AI Web3
 
+## TODO List
+- [ ] Fix TypeScript linter errors in frontend components
+- [ ] Review and consolidate converter implementations:
+  - `converter/src/convert.py` (Docker/Cloud Run version)
+  - `functions/converter/convert.py` (Firebase Functions version)
+  - Ensure proper integration between Firebase Functions and Cloud Run service
+- [ ] Set up proper environment variables for deployment
+- [ ] Complete Docker container configuration for USDZ conversion
+- [ ] Test end-to-end conversion flow
+- [ ] Add proper error handling and logging
+- [ ] Document deployment process
+- [ ] Directory Structure Reorganization:
+  - Current nested server directories need simplification
+  - Proposed structure:
+    ```
+    h3m-studio-ai-web3/
+    ├── server/              # Main server directory
+    │   ├── proxy/          # Proxy server code
+    │   ├── converter/      # USD conversion service
+    │   └── venv/          # Python virtual environment
+    ```
+  - Steps needed:
+    1. Document all current dependencies and paths
+    2. Update Docker configurations
+    3. Update npm/node scripts
+    4. Update import/require paths
+    5. Update Python import paths
+    6. Update configuration files
+    7. Update build processes
+    8. Update service discovery
+    9. Test thoroughly in new branch
+    10. Create migration guide
+
 ## System Architecture
 
 ### Frontend Stack
@@ -110,6 +143,12 @@ match /users/{userId} {
 1. Firebase configuration in `src/config/firebase.ts`
 2. Meshy API keys in environment variables
 3. CORS configuration for development
+4. Python virtual environment setup:
+   ```bash
+   python -m venv venv
+   source venv/bin/activate  # On Windows: venv\Scripts\activate
+   pip install -r converter/requirements.txt
+   ```
 
 ### Adding New Features
 1. Implement component logic
@@ -122,6 +161,102 @@ match /users/{userId} {
 2. **Large File Handling**: Stream responses for models
 3. **Auth State**: Use `useAdmin` hook for role checks
 4. **Route Protection**: Always wrap with appropriate HOC
+
+## Cloud Run Deployment Guide
+
+### Prerequisites
+1. Google Cloud CLI installed and initialized
+2. Docker installed and running
+3. Access to the Google Cloud project (`h3m-studio-b17e2`)
+4. Firebase project initialized
+
+### Build and Deploy Steps
+```bash
+# 1. Build the Docker image locally
+docker build -t usdz-converter ./converter
+
+# 2. Tag the image for Google Container Registry
+docker tag usdz-converter gcr.io/h3m-studio-b17e2/usdz-converter
+
+# 3. Push to Google Container Registry
+docker push gcr.io/h3m-studio-b17e2/usdz-converter
+
+# 4. Deploy to Cloud Run
+gcloud run deploy usdz-converter \
+  --image gcr.io/h3m-studio-b17e2/usdz-converter \
+  --platform managed \
+  --region us-central1 \
+  --memory 2Gi \
+  --cpu 2 \
+  --port 8080 \
+  --allow-unauthenticated
+```
+
+### Environment Variables
+```bash
+# Required environment variables for the service
+GOOGLE_CLOUD_PROJECT=h3m-studio-b17e2
+FIREBASE_STORAGE_BUCKET=h3m-studio-b17e2.appspot.com
+```
+
+### Service Configuration
+1. **Resources**:
+   - Memory: 2GB minimum
+   - CPU: 2 vCPUs recommended
+   - Concurrency: 80 (default)
+
+2. **Networking**:
+   - Port: 8080
+   - HTTPS enabled by default
+   - Custom domain optional
+
+3. **Security**:
+   - Service account needs these roles:
+     - `roles/storage.objectViewer`
+     - `roles/storage.objectCreator`
+   - HTTPS enforced
+   - Authentication optional based on requirements
+
+### Monitoring & Maintenance
+1. **Health Checks**:
+   - Endpoint: `/`
+   - HTTP GET request
+   - Expected response: 200 OK
+
+2. **Logging**:
+   - View logs in Google Cloud Console
+   - Monitor for errors and performance
+   - Set up alerts for critical issues
+
+3. **Scaling**:
+   - Auto-scales based on traffic
+   - Min instances: 0
+   - Max instances: Set based on budget
+   - Concurrent requests per instance: 80
+
+### Troubleshooting
+1. **Common Issues**:
+   - Memory limits: Increase if OOM errors occur
+   - Cold starts: Use min instances > 0 if needed
+   - Timeout errors: Adjust timeout in gunicorn config
+
+2. **Debugging**:
+   - Check container logs in Cloud Console
+   - Verify environment variables
+   - Test service account permissions
+   - Monitor resource usage
+
+### Cost Optimization
+1. **Best Practices**:
+   - Use minimum required resources
+   - Allow scaling to zero when idle
+   - Monitor and adjust resource allocation
+   - Set budget alerts
+
+2. **Estimated Costs**:
+   - Based on vCPU, memory, and request volume
+   - Only pay for actual usage
+   - Includes free tier benefits
 
 ## Deployment Checklist
 - [ ] Update Firebase security rules
@@ -395,6 +530,25 @@ interface ProgressResponse {
    - Implement proper access controls
 
 ## Critical Implementation Notes
+
+### Model Loading - CRITICAL!! IMPORTANT
+When loading models in any component (ModelViewer, SceneBuilder, etc.), ALWAYS use direct Firebase Storage URLs with useGLTF:
+```typescript
+// CORRECT WAY - Use Firebase Storage URL directly
+const { scene } = useGLTF(modelUrl);
+
+// INCORRECT - Do not use proxy for model loading
+// const proxyUrl = `${API_URL}/api/model?url=${encodeURIComponent(modelUrl)}`;
+// const { scene } = useGLTF(proxyUrl);
+```
+
+This is critical for:
+- Model Viewer
+- Scene Builder
+- 4-Up View
+- Any component using Three.js/React Three Fiber
+
+Proxy usage for model loading will result in 404 errors and broken model display.
 
 ### Image-to-3D Functionality
 **IMPORTANT: The following implementation details MUST be preserved for proper functionality:**

@@ -9,6 +9,15 @@ export default defineConfig({
   },
   optimizeDeps: {
     exclude: ['lucide-react'],
+    esbuildOptions: {
+      define: {
+        global: 'globalThis'
+      }
+    }
+  },
+  define: {
+    'process.env': process.env,
+    global: 'globalThis'
   },
   server: {
     proxy: {
@@ -19,4 +28,11 @@ export default defineConfig({
       },
     },
   },
+  resolve: {
+    alias: {
+      process: 'process/browser',
+      stream: 'stream-browserify',
+      util: 'util'
+    }
+  }
 });

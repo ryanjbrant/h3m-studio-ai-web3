@@ -4,7 +4,7 @@ import {
   Wallet, Box, Clock, BarChart2, Settings, AlertCircle,
   ChevronDown, X, HardDrive
 } from 'lucide-react';
-import { collection, query, where, getDocs, doc, updateDoc, deleteDoc, Timestamp } from 'firebase/firestore';
+import { collection, query, where, getDocs, doc, updateDoc, deleteDoc, Timestamp, limit as limitQuery } from 'firebase/firestore';
 import { db } from '../../config/firebase';
 import { Line } from 'react-chartjs-2';
 import 'chart.js/auto';
@@ -53,7 +53,11 @@ interface UserModal {
   userId: string | null;
 }
 
-export const UserManagement: React.FC = () => {
+interface UserManagementProps {
+  limit?: number;
+}
+
+export const UserManagement: React.FC<UserManagementProps> = ({ limit }) => {
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -78,7 +82,8 @@ export const UserManagement: React.FC = () => {
     try {
       setLoading(true);
       const usersRef = collection(db, 'users');
-      const snapshot = await getDocs(usersRef);
+      const q = limit ? query(usersRef, limitQuery(limit)) : query(usersRef);
+      const snapshot = await getDocs(q);
       
       const userData = snapshot.docs.map(doc => ({
         id: doc.id,

@@ -1,12 +1,11 @@
-import React from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { withAdminAuth } from '../../middleware/auth';
 import { AdminLayout } from '../../components/admin/AdminLayout';
 import { UserManagement } from '../../components/admin/UserManagement';
-import { ContentManagement } from '../../components/admin/ContentManagement';
 import { AnalyticsOverview } from '../../components/admin/AnalyticsOverview';
 import { GenerationsPanel } from '../../components/admin/GenerationsPanel';
 import { Settings } from '../../components/admin/Settings';
+import { ResourcesPanel } from '../../components/admin';
 
 const DashboardOverview = () => (
   <div className="space-y-8">
@@ -32,6 +31,7 @@ function Dashboard() {
         <Route path="users" element={<UserManagement />} />
         <Route path="generations" element={<GenerationsPanel />} />
         <Route path="analytics" element={<AnalyticsOverview />} />
+        <Route path="resources" element={<ResourcesPanel />} />
         <Route path="settings" element={<Settings />} />
         <Route path="*" element={<Navigate to="/admin" replace />} />
       </Routes>

@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { User, LogOut, LayoutDashboard, Users, Box, BarChart2, Settings, UserCircle } from 'lucide-react';
+import { User, LogOut, LayoutDashboard, Users, Box, BarChart2, Settings, UserCircle, FileText } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
 import { useNavigate } from 'react-router-dom';
 import { useAdmin } from '../../hooks/useAdmin';
@@ -8,6 +8,7 @@ const adminMenuItems = [
   { icon: LayoutDashboard, label: 'Dashboard', path: '/admin' },
   { icon: Users, label: 'Users', path: '/admin/users' },
   { icon: Box, label: 'Content', path: '/admin/content' },
+  { icon: FileText, label: 'Resources', path: '/admin/resources' },
   { icon: BarChart2, label: 'Analytics', path: '/admin/analytics' },
   { icon: Settings, label: 'Settings', path: '/admin/settings' },
 ];

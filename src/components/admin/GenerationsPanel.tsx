@@ -5,7 +5,11 @@ import { Timestamp } from 'firebase/firestore';
 import { Eye, Trash2, Send } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
-export function GenerationsPanel() {
+interface GenerationsPanelProps {
+  limit?: number;
+}
+
+export const GenerationsPanel: React.FC<GenerationsPanelProps> = ({ limit }) => {
   const [generations, setGenerations] = useState<GenerationData[]>([]);
   const [loading, setLoading] = useState(true);
   const [lastTimestamp, setLastTimestamp] = useState<Timestamp>();
@@ -27,7 +31,8 @@ export function GenerationsPanel() {
         timestamp,
         {
           type: filters.type || undefined,
-          status: filters.status || undefined
+          status: filters.status || undefined,
+          limit: limit
         }
       );
       
@@ -158,4 +163,4 @@ export function GenerationsPanel() {
       )}
     </div>
   );
-} 
+}; 
